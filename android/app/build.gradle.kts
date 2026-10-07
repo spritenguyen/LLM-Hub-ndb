@@ -30,7 +30,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val hfToken: String = localProperties.getProperty("HF_TOKEN", "")
         buildConfigField("String", "HF_TOKEN", "\"$hfToken\"")
-        val debugPremium: Boolean = localProperties.getProperty("DEBUG_PREMIUM", "false").toBoolean()
+        // Personal fork: use the upstream local premium switch for every build type.
+        // Explicit -P wins over local.properties, then the checked-in fork default.
+        val debugPremium: Boolean = (gradle.startParameter.projectProperties["DEBUG_PREMIUM"]
+            ?: localProperties.getProperty("DEBUG_PREMIUM")
+            ?: providers.gradleProperty("DEBUG_PREMIUM").getOrElse("false")).toBoolean()
         buildConfigField("Boolean", "DEBUG_PREMIUM", "$debugPremium")
 
 

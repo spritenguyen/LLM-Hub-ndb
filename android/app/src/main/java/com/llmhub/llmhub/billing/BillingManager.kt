@@ -120,6 +120,7 @@ class BillingManager(private val context: Context) {
      * May miss purchases on a brand-new device that hasn't synced yet.
      */
     suspend fun restorePurchases() {
+        if (BuildConfig.DEBUG_PREMIUM) return
         if (!billingClient.isReady) {
             Log.d(TAG, "Billing not ready, skipping restore")
             return
@@ -133,6 +134,7 @@ class BillingManager(private val context: Context) {
      * Returns true if premium was found and activated.
      */
     suspend fun restorePurchasesFromServer(): Boolean {
+        if (BuildConfig.DEBUG_PREMIUM) return true
         if (!billingClient.isReady) {
             // Try to reconnect and wait briefly
             connectAndQuery()
@@ -180,6 +182,7 @@ class BillingManager(private val context: Context) {
      * Must be called from a composable or function that has access to the current Activity.
      */
     fun launchPurchaseFlow(activity: Activity) {
+        if (BuildConfig.DEBUG_PREMIUM) return
         val details = productDetails
         if (details == null) {
             // Re-query and try again on next user attempt

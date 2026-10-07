@@ -134,6 +134,34 @@ DEBUG_PREMIUM=true
 ```
 Set it back to `false` before making a production build.
 
+#### Personal Android fork (LLM-Hub-ndb)
+
+This fork enables the author's `DEBUG_PREMIUM` switch by default in
+`android/gradle.properties`, for both debug and release builds. Local model import,
+all Premium-gated tools, TTS, web search, and global memory use the existing
+unlocked path. Purchase/restore actions do not contact Play Billing in this mode.
+No purchase entitlement is written to preferences.
+
+```bash
+cd android
+./gradlew assembleDebug
+# Or build an optimized, debug-key-signed APK for personal use:
+./gradlew assembleRelease
+```
+
+The existing GitHub Actions workflow builds a debug APK on pushes to `main`.
+Download `LLM-Hub-debug` from the successful workflow run's artifacts.
+To test the normal purchase-gated behavior, use `-PDEBUG_PREMIUM=false`.
+Priority: explicit `-PDEBUG_PREMIUM` > `local.properties` > `gradle.properties`.
+Remove any old `DEBUG_PREMIUM=false` entry in `local.properties` to use this
+fork's unlocked default.
+
+This changes Android feature access only; it does not downgrade to 3.6.1,
+restore removed engines, grant Hugging Face model access, or remove hardware
+requirements. iOS is unchanged. On-device verification is still required:
+import a supported local model, load it and send a chat message; reopen the app
+offline; check Premium tool navigation, TTS, web search and global memory.
+
 #### Model License Acceptance
 Some models on HuggingFace (especially from Google and Meta) require explicit license acceptance before downloading. When building the app locally:
 
