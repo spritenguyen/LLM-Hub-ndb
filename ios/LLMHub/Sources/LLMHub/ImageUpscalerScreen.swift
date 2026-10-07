@@ -54,8 +54,7 @@ struct ImageUpscalerScreen: View {
         .navigationTitle(settings.localized("image_upscale_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -71,7 +70,7 @@ struct ImageUpscalerScreen: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             ImageUpscalerSettingsSheet(
                 selectedModelId: $selectedModelId,
                 availableModels: downloadedModels
@@ -585,8 +584,10 @@ struct ImageUpscalerSettingsSheet: View {
                 }
                 .padding()
             }
+            .apolloScreenBackground()
             .navigationTitle(settings.localized("feature_settings_title"))
             .navigationBarTitleDisplayMode(.inline)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(settings.localized("close")) { dismiss() }

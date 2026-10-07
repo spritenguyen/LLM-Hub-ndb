@@ -58,7 +58,109 @@ private struct ApolloScreenBackgroundModifier: ViewModifier {
     }
 }
 
+private struct ApolloSheetModifier<SheetContent: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    @State private var coversPresenter = false
+    let sheetContent: () -> SheetContent
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if coversPresenter {
+                    Color.black.ignoresSafeArea().allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .sheet(isPresented: $isPresented, onDismiss: { coversPresenter = false }) {
+                sheetContent()
+                    .presentationBackground(Color.black)
+                    .onAppear {
+                        // Wait until the sheet's presentation has started. Covering the
+                        // presenter before this point produces a full-screen black flash.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            if isPresented { coversPresenter = true }
+                        }
+                    }
+            }
+            .onChange(of: isPresented) { _, presented in
+                if !presented { coversPresenter = false }
+            }
+    }
+}
+
+private struct ApolloItemSheetModifier<Item: Identifiable, SheetContent: View>: ViewModifier {
+    @Binding var item: Item?
+    @State private var coversPresenter = false
+    let sheetContent: (Item) -> SheetContent
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if coversPresenter {
+                    Color.black.ignoresSafeArea().allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .sheet(item: $item, onDismiss: { coversPresenter = false }) { value in
+                sheetContent(value)
+                    .presentationBackground(Color.black)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            if item != nil { coversPresenter = true }
+                        }
+                    }
+            }
+            .onChange(of: item?.id) { _, id in
+                if id == nil { coversPresenter = false }
+            }
+    }
+}
+
 extension View {
+    /// Keep the presenting screen out of the exposed area above a modal sheet.
+    /// A sheet preserves the presenter's lifecycle, including active model sessions.
+    func apolloSheet<SheetContent: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> SheetContent
+    ) -> some View {
+        modifier(ApolloSheetModifier(isPresented: isPresented, sheetContent: content))
+    }
+
+    func apolloSheet<Item: Identifiable, SheetContent: View>(
+        item: Binding<Item?>,
+        @ViewBuilder content: @escaping (Item) -> SheetContent
+    ) -> some View {
+        modifier(ApolloItemSheetModifier(item: item, sheetContent: content))
+    }
+
+    /// The navigation bar and its scroll views share the screen's background.
+    /// This affects the full-width backdrop, while retaining native button styling.
+    func apolloNavigationBackground() -> some View {
+        toolbarBackground(.hidden, for: .navigationBar)
+            .apolloTopScrollEdgeFade()
+    }
+
+    /// Use the native soft transition beneath top bars and the status area.
+    /// Select soft explicitly instead of relying on the system automatic style.
+    @ViewBuilder
+    func apolloTopScrollEdgeFade() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectHidden(false, for: .top)
+                .scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func apolloTopScrollEdgeHidden() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            self
+        }
+    }
+
     func apolloScreenBackground() -> some View {
         modifier(ApolloScreenBackgroundModifier())
     }

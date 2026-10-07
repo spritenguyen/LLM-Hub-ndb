@@ -65,7 +65,7 @@ enum class ModelFormat {
 }
 
 enum class DownloadCategory {
-    MULTIMODAL, TEXT, ASR, TTS, EMBEDDING, IMAGE_GENERATION, IMAGE_UPSCALE
+    MULTIMODAL, TEXT, ASR, TTS, EMBEDDING, IMAGE_GENERATION, IMAGE_UPSCALE, MUSIC_GENERATION
 }
 
 /**
@@ -133,6 +133,8 @@ fun ModelDownloadScreen(
     val imageGenGrouped = imageGenerationModels.groupBy { it.name.substringBefore("(").trim() }
     val imageUpscaleModels = models.filter { it.category == "image_upscale" }
     val imageUpscaleGrouped = imageUpscaleModels.groupBy { it.name.substringBefore("(").trim() }
+    val musicGenModels = models.filter { it.category == "music_generation" }
+    val musicGenGrouped = musicGenModels.groupBy { it.name.substringBefore("(").trim() }
 
     var showImportDialog by remember { mutableStateOf(false) }
     var errorDialogInfo by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -144,7 +146,8 @@ fun ModelDownloadScreen(
         DownloadCategory.TTS,
         DownloadCategory.EMBEDDING,
         DownloadCategory.IMAGE_GENERATION,
-        DownloadCategory.IMAGE_UPSCALE
+        DownloadCategory.IMAGE_UPSCALE,
+        DownloadCategory.MUSIC_GENERATION
     )
 
     LaunchedEffect(downloadViewModel) {
@@ -231,6 +234,7 @@ fun ModelDownloadScreen(
                         DownloadCategory.EMBEDDING -> stringResource(R.string.embedding_models)
                         DownloadCategory.IMAGE_GENERATION -> stringResource(R.string.image_generation_models)
                         DownloadCategory.IMAGE_UPSCALE -> stringResource(R.string.image_upscale_models_title)
+                        DownloadCategory.MUSIC_GENERATION -> stringResource(R.string.music_generation_models)
                     }
                     val count = when (category) {
                         DownloadCategory.MULTIMODAL -> multimodalModels.size
@@ -240,6 +244,7 @@ fun ModelDownloadScreen(
                         DownloadCategory.EMBEDDING -> embeddingModels.size
                         DownloadCategory.IMAGE_GENERATION -> imageGenerationModels.size
                         DownloadCategory.IMAGE_UPSCALE -> imageUpscaleModels.size
+                        DownloadCategory.MUSIC_GENERATION -> musicGenModels.size
                     }
                     Tab(
                         selected = selectedTab == index,
@@ -383,6 +388,23 @@ fun ModelDownloadScreen(
                             }
                         }
                     }
+                    DownloadCategory.MUSIC_GENERATION -> {
+                        item {
+                            Text(stringResource(R.string.music_generation_models_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        musicGenGrouped.forEach { (family, variants) ->
+                            item {
+                                ModelFamilyCard(
+                                    family = family,
+                                    variants = variants,
+                                    context = context,
+                                    viewModel = downloadViewModel,
+                                    isMultimodal = false,
+                                    onDownload = { downloadViewModel.downloadModel(it) }
+                                )
+                            }
+                        }
+                    }
                 }
                 
                 item {
@@ -395,6 +417,11 @@ fun ModelDownloadScreen(
         if (showImportDialog) {
             ImportExternalModelDialog(
                 onDismiss = { showImportDialog = false },
+                onSearchHuggingFace = { query, format, page -> downloadViewModel.searchHuggingFaceFiles(query, format, page) },
+                onDownloadHuggingFace = { name, format, main, projector, vision, contextSize, mtp ->
+                    downloadViewModel.downloadHuggingFaceImport(name, format, main, projector, vision, contextSize, mtp)
+                    showImportDialog = false
+                },
                 onImport = { externalModel, projectorUri ->
                     val success = downloadViewModel.addExternalModel(externalModel)
                     if (success) {
@@ -1096,6 +1123,8 @@ private fun getModelDisplayName(model: LLMModel, context: Context): String {
 @Composable
 private fun ImportExternalModelDialog(
     onDismiss: () -> Unit,
+    onSearchHuggingFace: suspend (String, String, Int) -> List<com.llmhub.llmhub.viewmodels.HuggingFaceModelFile>,
+    onDownloadHuggingFace: (String, String, com.llmhub.llmhub.viewmodels.HuggingFaceModelFile, com.llmhub.llmhub.viewmodels.HuggingFaceModelFile?, Boolean, Int, Boolean) -> Unit,
     onImport: (LLMModel, Uri?) -> Boolean
 ) {
     val context = LocalContext.current
@@ -1107,8 +1136,16 @@ private fun ImportExternalModelDialog(
     var supportsVision by remember { mutableStateOf(false) }
     var supportsAudio by remember { mutableStateOf(false) }
     var supportsGpu by remember { mutableStateOf(false) }
-    var modelFormat by remember { mutableStateOf(ModelFormat.TASK) }
+    var supportsMtp by remember { mutableStateOf(false) }
+    var modelFormat by remember { mutableStateOf(ModelFormat.GGUF) }
     var contextWindowSize by remember { mutableStateOf("2048") }
+    var huggingFaceQuery by remember { mutableStateOf("") }
+    var huggingFaceResults by remember { mutableStateOf<List<com.llmhub.llmhub.viewmodels.HuggingFaceModelFile>>(emptyList()) }
+    var selectedHuggingFaceModel by remember { mutableStateOf<com.llmhub.llmhub.viewmodels.HuggingFaceModelFile?>(null) }
+    var selectedHuggingFaceProjector by remember { mutableStateOf<com.llmhub.llmhub.viewmodels.HuggingFaceModelFile?>(null) }
+    var isSearchingHuggingFace by remember { mutableStateOf(false) }
+    var huggingFacePage by remember { mutableStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
     
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
@@ -1225,6 +1262,72 @@ private fun ImportExternalModelDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+
+                if (modelFormat == ModelFormat.GGUF || modelFormat == ModelFormat.LITERTLM) item {
+                    OutlinedTextField(
+                        value = huggingFaceQuery,
+                        onValueChange = { huggingFaceQuery = it },
+                        label = { Text(stringResource(R.string.search_huggingface)) },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                coroutineScope.launch {
+                                    isSearchingHuggingFace = true
+                                    try {
+                                        huggingFacePage = 0
+                                        selectedHuggingFaceModel = null
+                                        selectedHuggingFaceProjector = null
+                                        huggingFaceResults = onSearchHuggingFace(huggingFaceQuery, modelFormat.name.lowercase(), 0)
+                                    }
+                                    catch (e: Exception) { showError = true; errorMessage = e.message ?: context.getString(R.string.huggingface_search_failed) }
+                                    isSearchingHuggingFace = false
+                                }
+                            }, enabled = huggingFaceQuery.isNotBlank() && !isSearchingHuggingFace) {
+                                if (isSearchingHuggingFace) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                else Icon(Icons.Default.Search, contentDescription = stringResource(R.string.search_huggingface))
+                            }
+                        }, modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (modelFormat == ModelFormat.GGUF || modelFormat == ModelFormat.LITERTLM) {
+                val nonProjectorResults = huggingFaceResults.filter { !it.isProjector }
+                val pageSize = 10
+                val totalPages = ((nonProjectorResults.size + pageSize - 1) / pageSize).coerceAtLeast(1)
+                val pagedResults = nonProjectorResults.drop(huggingFacePage * pageSize).take(pageSize)
+                pagedResults.forEach { file ->
+                    item {
+                        TextButton(onClick = {
+                            selectedHuggingFaceModel = file
+                            selectedFileUri = null
+                            selectedFileName = file.path
+                            modelName = file.path.substringAfterLast('/').substringBeforeLast('.')
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${file.repo}/${file.path}", maxLines = 1, modifier = Modifier.weight(1f))
+                                val sizeStr = android.text.format.Formatter.formatShortFileSize(context, file.sizeBytes)
+                                Text(sizeStr, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                }
+                if (totalPages > 1) item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { huggingFacePage -= 1 },
+                            enabled = huggingFacePage > 0
+                        ) { Text("‹") }
+                        Text("${huggingFacePage + 1} / $totalPages", style = MaterialTheme.typography.labelMedium)
+                        TextButton(
+                            onClick = { huggingFacePage += 1 },
+                            enabled = huggingFacePage < totalPages - 1
+                        ) { Text("›") }
+                    }
+                }
+                }
                 
                     item {
                         Button(
@@ -1245,7 +1348,7 @@ private fun ImportExternalModelDialog(
                     }
 
                     // If user enabled Supports Vision, show a file selector for the Vision Projector
-                    if (supportsVision) {
+                    if (modelFormat == ModelFormat.GGUF && supportsVision) {
                         item {
                             Spacer(modifier = Modifier.height(6.dp))
                             Button(
@@ -1266,6 +1369,19 @@ private fun ImportExternalModelDialog(
                             }
 
 
+                        }
+                    }
+
+                    if (modelFormat == ModelFormat.GGUF && selectedHuggingFaceModel != null) {
+                        huggingFaceResults.filter { it.isProjector && it.repo == selectedHuggingFaceModel?.repo }.forEach { file ->
+                            item {
+                                TextButton(onClick = {
+                                    selectedHuggingFaceProjector = file
+                                    supportsVision = true
+                                }, modifier = Modifier.fillMaxWidth()) {
+                                    Text(stringResource(R.string.download_vision_projector) + ": " + file.path, maxLines = 1)
+                                }
+                            }
                         }
                     }
                     
@@ -1400,6 +1516,25 @@ private fun ImportExternalModelDialog(
                             )
                         }
                     }
+
+                    if (modelFormat == ModelFormat.LITERTLM) {
+                        item {
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.supports_mtp),
+                                    modifier = Modifier.clickable { supportsMtp = !supportsMtp }
+                                )
+                                RadioButton(
+                                    selected = supportsMtp,
+                                    onClick = { supportsMtp = !supportsMtp }
+                                )
+                            }
+                        }
+                    }
                 }
                 
                 item {
@@ -1440,7 +1575,14 @@ private fun ImportExternalModelDialog(
                                     DropdownMenuItem(
                                         text = { Text(format.name.lowercase()) },
                                         onClick = {
-                                            modelFormat = format
+                                        modelFormat = format
+                                        huggingFaceResults = emptyList()
+                                        huggingFacePage = 0
+                                        if (format != ModelFormat.GGUF) {
+                                            supportsVision = false
+                                            selectedVisionProjectorUri = null
+                                            selectedHuggingFaceProjector = null
+                                        }
                                             showFormatMenu = false
                                         }
                                     )
@@ -1448,8 +1590,8 @@ private fun ImportExternalModelDialog(
                             }
                         }
                         
-                        // Only show context window for text models (TASK, LITERTLM, GGUF)
-                        if (modelFormat == ModelFormat.TASK || modelFormat == ModelFormat.LITERTLM || modelFormat == ModelFormat.GGUF) {
+                        // GGUF context length comes from its file header after import/download.
+                        if (modelFormat == ModelFormat.TASK || modelFormat == ModelFormat.LITERTLM) {
                             val contextWindowError = contextWindowSize.toIntOrNull() == null || contextWindowSize.toIntOrNull()!! <= 0
                             val contextWindowErrorText = stringResource(R.string.context_window_size_invalid)
                             
@@ -1472,11 +1614,18 @@ private fun ImportExternalModelDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    selectedHuggingFaceModel?.let { remote ->
+                        if (modelName.isNotBlank()) {
+                            val contextSize = if (modelFormat == ModelFormat.GGUF) 4096 else contextWindowSize.toIntOrNull() ?: 4096
+                            onDownloadHuggingFace(modelName, modelFormat.name.lowercase(), remote, selectedHuggingFaceProjector, supportsVision, contextSize, supportsMtp)
+                        }
+                        return@Button
+                    }
                     // Validate inputs
                     val nameValid = modelName.isNotBlank()
                     val fileValid = selectedFileUri != null
-                    // Context window only required for text models (TASK, LITERTLM, GGUF)
-                    val contextValid = if (modelFormat == ModelFormat.TASK || modelFormat == ModelFormat.LITERTLM || modelFormat == ModelFormat.GGUF) {
+                    // Only formats without GGUF header metadata need a manual context value.
+                    val contextValid = if (modelFormat == ModelFormat.TASK || modelFormat == ModelFormat.LITERTLM) {
                         contextWindowSize.toIntOrNull() != null && contextWindowSize.toIntOrNull()!! > 0
                     } else {
                         true // Image models don't need context window
@@ -1553,11 +1702,12 @@ private fun ImportExternalModelDialog(
                             supportsVision = actualSupportsVision,
                             supportsAudio = actualSupportsAudio,
                             supportsGpu = actualSupportsGpu,
+                            supportsMtp = if (modelFormat == ModelFormat.LITERTLM) supportsMtp else true,
                             requirements = ModelRequirements(
                                 minRamGB = 4,
                                 recommendedRamGB = 8
                             ),
-                            contextWindowSize = contextWindowSize.toInt(),
+                            contextWindowSize = if (modelFormat == ModelFormat.GGUF) 4096 else contextWindowSize.toInt(),
                             modelFormat = modelFormat.name.lowercase(),
                             // projector file will be copied asynchronously by ViewModel after import
                             additionalFiles = emptyList(),
@@ -1573,7 +1723,7 @@ private fun ImportExternalModelDialog(
                         }
                     }
                 },
-                enabled = modelName.isNotBlank() && selectedFileUri != null
+                enabled = modelName.isNotBlank() && (selectedFileUri != null || selectedHuggingFaceModel != null)
             ) {
                 Text(stringResource(R.string.import_model))
             }

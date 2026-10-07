@@ -75,7 +75,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.llmhub.llmhub.LlmHubApplication
 import com.llmhub.llmhub.R
-import com.llmhub.llmhub.ads.BannerAd
 import com.llmhub.llmhub.components.ModelSelectorCard
 import com.llmhub.llmhub.ui.components.AudioInputService
 import com.llmhub.llmhub.ui.components.TtsService
@@ -487,16 +486,30 @@ fun VibeVoiceScreen(
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                             shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
                         ) {
                             Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier
+                                    .padding(14.dp)
+                                    .fillMaxWidth()
                             ) {
-                                Text(
-                                    text = latestAssistantText,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+                                val scrollState = rememberScrollState()
+                                LaunchedEffect(scrollState.maxValue) {
+                                    scrollState.animateScrollTo(scrollState.maxValue)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f, fill = false)
+                                        .verticalScroll(scrollState)
+                                ) {
+                                    Text(
+                                        text = latestAssistantText,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.End
@@ -510,14 +523,6 @@ fun VibeVoiceScreen(
                             }
                         }
                     }
-                }
-
-                if (!isPremium) {
-                    BannerAd(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                    )
                 }
             }
         }

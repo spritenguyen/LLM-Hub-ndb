@@ -73,12 +73,12 @@
     <string name="github_repository">GitHub Repository</string>
     <string name="acknowledgments">鸣谢</string>
     <string name="acknowledgments_text">特别感谢谷歌、Meta、微软、IBM 以及 HuggingFace 社区提供驱动本应用的卓越大型语言模型。本项目同时依托于安卓开发者社区和开源生态系统的杰出贡献。</string>
-    <string name="sd_models_credit">图像生成模型基于 xororz 的 Stable Diffusion 实现方案，采用高通 QNN（NPU）和阿里巴巴 MNN（CPU）后端支持。</string>
+    <string name="sd_models_credit">图像生成模型基于 xororz 的 Stable Diffusion 实现方案，采用高通 QNN（NPU）和CPU后端支持。</string>
     <string name="nexa_sdk_credit">GGUF 模型推理由 Nexa SDK 提供支持。</string>
     <string name="ai_thinking">AI 思考中...</string>
     <string name="thinking_label">深度思考</string>
     <string name="thinking_tokens">思考 (%1$d tokens)</string>
-    <string name="version_number">版本号 3.8.3</string>
+    <string name="version_number">版本号 4.4.2</string>
     <string name="app_version">应用版本</string>
     
     <!-- Terms of Service -->
@@ -424,6 +424,7 @@
     <string name="supports_vision">支持视觉</string>
     <string name="supports_audio">支持音频</string>
     <string name="supports_gpu">支持显卡加速</string>
+    <string name="supports_mtp">支持MTP</string>
     <string name="model_format">模型格式</string>
     <string name="context_window_size">上下文窗口大小</string>
     <string name="import_model">导入模型</string>
@@ -575,7 +576,8 @@
     <string name="translator_auto_detect">自动检测</string>
     <string name="translator_translate">翻译</string>
     <string name="translator_result">翻译结果</string>
-    <string name="translator_requires_gemma3n">此功能需要一个 Gemma-3n 或 Gemma-4 E2B/E4B 模型。请从模型列表下载一个。</string>
+    <string name="translator_requires_gemma3n">任何 LLM 模型均可用于翻译。推荐使用 Gemma 4 模型以获得最佳多语言性能。</string>
+    <string name="translator_load_model_desc">下载任何 LLM 模型即可开始翻译。推荐使用 Gemma 4 模型以获得最佳多语言性能。</string>
 
     <!-- Transcriber Screen -->
     <string name="transcriber_title">听写</string>
@@ -667,6 +669,7 @@
     <string name="lang_bulgarian">保加利亚语</string>
     <string name="lang_burmese">缅甸语</string>
     <string name="lang_catalan">加泰罗尼亚语</string>
+    <string name="lang_central_kurdish">中库尔德语（索拉尼语）</string>
     <string name="lang_chinese">简体中文</string>
     <string name="lang_chinese_traditional">繁体中文</string>
     <string name="lang_croatian">克罗地亚语</string>
@@ -814,9 +817,10 @@
     <!-- Premium / IAP -->
     <string name="premium_title">LLM Hub 终身高级版</string>
     <string name="premium_subtitle">解锁完整体验</string>
-    <string name="premium_feature_no_ads">永久去广告</string>
     <string name="premium_feature_vibe_coder">代码生成器 – AI 代码构建</string>
     <string name="premium_feature_image_gen">图像生成器 – 设备端 AI 绘画</string>
+    <string name="premium_feature_creaitors">creAItors – 生成 AI 伴侣</string>
+    <string name="premium_feature_vibevoice">VibeVoice – 免提 AI 语音聊天</string>
     <string name="premium_feature_tts">文字转语音自动朗读</string>
     <string name="premium_feature_import_models">导入外部模型</string>
     <string name="premium_feature_web_search">网络搜索 – 实时互联网结果</string>
@@ -834,10 +838,6 @@
     <string name="premium_restore_success">购买恢复成功！</string>
     <string name="premium_restore_nothing">未找到历史购买记录。</string>
     <string name="premium_go_premium">升级高级版</string>
-
-    <!-- Privacy &amp; Ads consent -->
-    <string name="privacy_ads_title">隐私与广告</string>
-    <string name="privacy_ads_subtitle">管理您的广告个性化和同意选项</string>
 
     <!-- Preserved new keys from current file -->
     <string name="export">导出</string>
@@ -891,4 +891,128 @@
     <string name="gemma_voice_option">Gemma</string>
         <string name="asr_model_backend"></string>
     <string name="llm_model_backend">LLM 模型后端</string>
+    <!-- Agent Feature -->
+    <string name="feature_agent">智能代理</string>
+    <string name="feature_agent_desc">具備工具與動作的 AI 助手</string>
+    <string name="premium_feature_agent">智能代理 – 具備工具與裝置動作的 AI</string>
+    <string name="agent_title">智能代理</string>
+    <string name="agent_subtitle">問我任何事 — 我可以搜尋、地圖、行事曆等</string>
+    <string name="agent_input_placeholder">詢問您的代理…</string>
+    <string name="agent_voice_mode_system">系統</string>
+    <string name="agent_voice_mode_whisper">Whisper</string>
+    <string name="agent_voice_mode_gemma">Gemma</string>
+    <string name="agent_tool_running">執行中：%1$s</string>
+    <string name="agent_tool_success">完成</string>
+    <string name="agent_tool_failed">失敗</string>
+    <string name="agent_tool_confirm_title">允許此動作？</string>
+    <string name="agent_tool_confirm_body">代理想要：%1$s</string>
+    <string name="agent_tool_approve">允許</string>
+    <string name="agent_tool_deny">拒絕</string>
+    <string name="agent_no_model">請下載模型以使用智能代理</string>
+    <string name="agent_map_expand">查看完整地圖</string>
+    <string name="agent_settings_voice_mode">語音輸入模式</string>
+    <string name="agent_settings_tools">已啟用工具</string>
+    <string name="agent_termux_toggle">啟用 Termux 命令（進階）</string>
+    <string name="agent_termux_confirm">執行命令：%1$s</string>
+    <string name="agent_calendar_confirm">建立活動：%1$s</string>
+    <string name="agent_shortcut_confirm">執行捷徑：%1$s</string>
+    <string name="agent_welcome_message">你好！我是您的 AI 助理。我可以搜尋網絡、顯示地圖、管理日曆事件、查看天氣、設定鬧鐘、傳送訊息和計算雜湊。今天我能為您提供什麼幫助？</string>
+    <string name="agent_no_model_android">請先下載 GGUF 或 LiteRT-LM 模型以使用助理</string>
+    <string name="agent_no_model_ios">請先下載模型以使用助理</string>
+    <string name="open_maps">Open Maps</string>
+    <string name="agent_processing_tool">Agent is processing tool...</string>
+    <string name="agent_termux_guide_title">Termux 設定指南</string>
+    <string name="agent_termux_guide_desc">在 Termux 中，啟用第三方應用程式執行權限：</string>
+    <string name="agent_termux_cmd_copied">命令已複製到剪貼簿</string>
+    <string name="agent_termux_pending_approval">需要核准</string>
+    <string name="agent_termux_run_cmd">執行命令</string>
+    <string name="agent_termux_cancel_cmd">取消</string>
+    <string name="agent_termux_cancelled">已由用户取消</string>
+
+    <!-- Text to Speech Feature -->
+    <string name="feature_text_to_speech">文本朗读</string>
+    <string name="feature_text_to_speech_desc">使用系统或Kokoro TTS语音朗读文本</string>
+    <string name="tts_feature_title">文本朗读</string>
+    <string name="tts_feature_subtitle">复制并粘贴文本，使用您配置的TTS引擎朗读。</string>
+    <string name="tts_input_hint">在此输入或粘贴文本...</string>
+    <string name="tts_speak_button">朗读</string>
+    <string name="tts_stop_button">停止朗读</string>
+    <string name="tts_paste_button">粘贴文本</string>
+    <string name="tts_clear_button">清空</string>
+    <string name="tts_speaking_status">正在朗读…</string>
+    <string name="tts_idle_status">准备朗读</string>
+    <string name="tts_empty_input_warning">请先输入或粘贴要朗读的文本。</string>
+    <string name="tts_engine_system">系统默认TTS</string>
+    <string name="tts_engine_kokoro">Kokoro TTS</string>
+    <string name="tts_current_voice">语音: %1$s</string>
+    <string name="tts_word_count">%1$d 个字</string>
+    <string name="search_huggingface">搜索 Hugging Face</string>
+    <string name="search_huggingface_placeholder">搜索 GGUF 或 LiteRT-LM 模型</string>
+    <string name="huggingface_results">Hugging Face 结果</string>
+    <string name="download_vision_projector">下载视觉投影器</string>
+    <string name="huggingface_search_failed">Hugging Face 搜索失败</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="feature_music_generator">音乐生成器</string>
+    <string name="feature_music_generator_desc">在设备端生成音乐和音效</string>
+    <string name="music_generation_models">音乐生成模型</string>
+    <string name="music_generation_models_description">用于创作音乐片段、音效和完整曲目的端侧 AI 模型。</string>
+    <string name="music_prompt_label">音乐描述 / 提示词</string>
+    <string name="prompt_hint_music">描述要生成的音乐或音效（例如：充满活力的电子乐、舒缓的钢琴伴奏）...</string>
+    <string name="music_style_presets">预设风格</string>
+    <string name="music_tier_select">生成器级别</string>
+    <string name="music_duration_label">时长</string>
+    <string name="generate_music">生成音乐</string>
+    <string name="generating_music">正在生成音乐...</string>
+    <string name="music_prompt_empty_warning">请输入您想生成的音乐描述。</string>
+    <string name="music_generated_success">音乐生成成功！</string>
+    <string name="music_saved_toast">音频已保存至本地媒体库！</string>
+    <string name="music_generator_download_model">請先下載模型</string>
+    <string name="music_generator_download_model_desc">從模型列表下載音樂生成模型，開始創作音樂。</string>
+
+    <!-- MCP Agent -->
+    <string name="agent_mcp_settings">MCP 設定</string>
+    <string name="agent_mcp_title">MCP 工具</string>
+    <string name="agent_mcp_description">連接 MCP 伺服器並允許代理程式使用其工具。</string>
+    <string name="agent_mcp_transport">傳輸方式</string>
+    <string name="agent_mcp_termux_stdio">Termux stdio</string>
+    <string name="agent_mcp_remote_http">遠端 HTTP</string>
+    <string name="agent_mcp_command">MCP 伺服器命令</string>
+    <string name="agent_mcp_termux_help">透過 Termux stdio 執行 MCP 伺服器。請先安裝必要的套件。</string>
+    <string name="agent_mcp_server_url">伺服器 URL</string>
+    <string name="agent_mcp_bearer_token">Bearer 權杖（選填）</string>
+    <string name="agent_mcp_approval_notice">每次 MCP 工具呼叫都必須在執行前取得您的核准。</string>
+    <string name="agent_mcp_connecting">連接中…</string>
+    <string name="agent_mcp_connected_tools">已連接 %1$d 個工具</string>
+    <string name="agent_mcp_error">MCP 錯誤：%1$s</string>
+    <string name="agent_mcp_connect">連接</string>
+    <string name="agent_mcp_disconnect">中斷連接</string>
+    <string name="agent_mcp_tool_request">MCP 工具：%1$s</string>
+    <string name="agent_mcp_allow">允許</string>
+    <string name="agent_mcp_deny">拒絕</string>
+    <string name="agent_mcp_approval_required">需要核准</string>
+    <string name="agent_mcp_denied">使用者已拒絕</string>
+    <string name="agent_mcp_status">狀態</string>
+    <string name="agent_termux_tool_title">Termux Shell 命令</string>
+    <string name="agent_mcp_termux_permission_required">请在 Android 设置 > 应用 > LLM Hub > 权限 > 其他权限中，允许 LLM Hub“在 Termux 环境中运行命令”。</string>
+    <string name="agent_mcp_termux_not_installed">需要 Termux 0.109 或更高版本。</string>
+    <string name="agent_mcp_termux_timed_out">Termux 在超时前未返回结果。</string>
+    <string name="agent_mcp_termux_run_command_unavailable">Google Play 版 Termux 不支持外部命令。若要使用 stdio，请安装 F-Droid/GitHub 版 Termux，或选择远程 HTTP。</string>
+    <string name="gguf_engine">GGUF 引擎</string>
+    <string name="gguf_engine_geniex_default">GenieX（默认）</string>
+    <string name="gguf_engine_llama_cpp">llama.cpp</string>
+    <string name="gguf_engine_crash_title">GGUF 引擎已停止</string>
+    <string name="gguf_engine_crash_message">GenieX 在加载 GGUF 模型时停止。请尝试在设置中更改 GGUF 引擎。</string>
+    <string name="gguf_engine_open_settings">打开设置</string>
+    <!-- Hugging Face Token -->
+    <string name="hf_token_title">Hugging Face 權杖</string>
+    <string name="hf_token_subtitle">下載模型的個人存取權杖</string>
+    <string name="hf_token_dialog_title">Hugging Face 存取權杖</string>
+    <string name="hf_token_explanation">若預設權杖失效、達到請求頻率上限，或下載需同意授權協議的模型，請輸入您在 huggingface.co/settings/tokens 取得的個人讀取權杖。</string>
+    <string name="hf_token_placeholder">輸入個人權杖 (hf_...)</string>
+    <string name="hf_token_using_default">使用預設權杖</string>
+    <string name="hf_token_custom_active">自訂權杖已啟用</string>
+    <string name="hf_token_clear">重設為預設值</string>
+    <string name="gguf_vulkan_setting">GGUF GPU 后端</string>
+    <string name="crash_recovery_title">应用意外关闭</string>
+    <string name="crash_recovery_message">请尝试加载更小的模型或使用 CPU。</string>
 </resources>

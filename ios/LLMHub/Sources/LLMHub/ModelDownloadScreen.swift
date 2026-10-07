@@ -1,5 +1,4 @@
 import SwiftUI
-import RunAnywhere
 import UniformTypeIdentifiers
 import ModelZoo
 
@@ -174,7 +173,7 @@ class ModelDownloadViewModel: ObservableObject {
             ?? FileManager.default.temporaryDirectory.appendingPathComponent(modelId, isDirectory: true)
     }
 
-    private static func migrateCustomModelIntoRunAnywhere(_ model: AIModel) -> AIModel {
+    private static func migrateCustomModelIntoAppStorage(_ model: AIModel) -> AIModel {
         guard model.source == "Custom" else { return model }
 
         let destinationDir = customModelDirectory(for: model.id)
@@ -203,23 +202,14 @@ class ModelDownloadViewModel: ObservableObject {
             url: destinationModelURL.path, category: model.category, sizeBytes: model.sizeBytes,
             source: model.source, supportsVision: model.supportsVision,
             supportsAudio: model.supportsAudio, supportsThinking: model.supportsThinking,
-            supportsGpu: model.supportsGpu, requirements: model.requirements,
+            supportsGpu: model.supportsGpu, supportsMtp: model.supportsMtp, requirements: model.requirements,
             contextWindowSize: model.contextWindowSize, modelFormat: model.modelFormat,
-            additionalFiles: migratedAdditional
+            additionalFiles: migratedAdditional, promptTemplate: model.promptTemplate,
+            chatTemplateFamily: model.chatTemplateFamily
         )
     }
 
     init() {
-        do {
-            try RunAnywhere.initialize(environment: .development)
-        } catch {
-            // Ignore repeated initialization attempts.
-        }
-
-        Task {
-            _ = await RunAnywhere.discoverDownloadedModels()
-        }
-
         // Initialize with default states for built-in models
         for model in ModelData.models {
             downloadStates[model.id] = .notDownloaded
@@ -245,6 +235,30 @@ class ModelDownloadViewModel: ObservableObject {
         return true
     }
 
+    /// Updates prompt template for an imported model (source == "Custom").
+    func updatePromptTemplate(for modelId: String, promptTemplate: String?) {
+        guard let idx = models.firstIndex(where: { $0.id == modelId }) else { return }
+        let model = models[idx]
+        guard model.source == "Custom" else { return }
+
+        let trimmed = promptTemplate?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newTemplate = (trimmed?.isEmpty == false) ? trimmed : nil
+
+        let updated = AIModel(
+            id: model.id, name: model.name, description: model.description,
+            url: model.url, category: model.category, sizeBytes: model.sizeBytes,
+            source: model.source, supportsVision: model.supportsVision,
+            supportsAudio: model.supportsAudio, supportsThinking: model.supportsThinking,
+            supportsGpu: model.supportsGpu, supportsMtp: model.supportsMtp, requirements: model.requirements,
+            contextWindowSize: model.contextWindowSize, modelFormat: model.modelFormat,
+            additionalFiles: model.additionalFiles, promptTemplate: newTemplate,
+            chatTemplateFamily: model.chatTemplateFamily
+        )
+        models[idx] = updated
+        saveImportedModels()
+        objectWillChange.send()
+    }
+
     /// Imports a vision projector file for an already-added custom model.
     /// Copies the projector to the model's directory and updates additionalFiles.
     func importVisionProjector(for modelId: String, fileName: String, from sourceURL: URL) {
@@ -266,9 +280,10 @@ class ModelDownloadViewModel: ObservableObject {
             url: model.url, category: model.category, sizeBytes: model.sizeBytes,
             source: model.source, supportsVision: model.supportsVision,
             supportsAudio: model.supportsAudio, supportsThinking: model.supportsThinking,
-            supportsGpu: model.supportsGpu, requirements: model.requirements,
+            supportsGpu: model.supportsGpu, supportsMtp: model.supportsMtp, requirements: model.requirements,
             contextWindowSize: model.contextWindowSize, modelFormat: model.modelFormat,
-            additionalFiles: files
+            additionalFiles: files, promptTemplate: model.promptTemplate,
+            chatTemplateFamily: model.chatTemplateFamily
         )
         models[idx] = updated
         saveImportedModels()
@@ -282,7 +297,7 @@ class ModelDownloadViewModel: ObservableObject {
         var needsResave = false
         for raw in imported {
             guard !models.contains(where: { $0.id == raw.id }) else { continue }
-            let model = Self.migrateCustomModelIntoRunAnywhere(ModelData.normalizeCustomModel(raw))
+            let model = Self.migrateCustomModelIntoAppStorage(ModelData.normalizeCustomModel(raw))
             if model.url != raw.url || model.additionalFiles != raw.additionalFiles { needsResave = true }
             models.append(model)
             downloadStates[model.id] = .downloaded
@@ -301,9 +316,10 @@ class ModelDownloadViewModel: ObservableObject {
             url: fixedURL, category: model.category, sizeBytes: model.sizeBytes,
             source: model.source, supportsVision: model.supportsVision,
             supportsAudio: model.supportsAudio, supportsThinking: model.supportsThinking,
-            supportsGpu: model.supportsGpu, requirements: model.requirements,
+            supportsGpu: model.supportsGpu, supportsMtp: model.supportsMtp, requirements: model.requirements,
             contextWindowSize: model.contextWindowSize, modelFormat: model.modelFormat,
-            additionalFiles: fixedAdditional
+            additionalFiles: fixedAdditional, promptTemplate: model.promptTemplate,
+            chatTemplateFamily: model.chatTemplateFamily
         )
     }
 
@@ -457,7 +473,7 @@ class ModelDownloadViewModel: ObservableObject {
 
         let suffix = model.name[model.name.index(after: openIndex)..<closeIndex]
         let suffixUpper = suffix.uppercased().replacingOccurrences(of: "-", with: "_")
-        let likelyQuant = suffixUpper.contains("Q") || suffixUpper.contains("IQ") || suffixUpper.contains("F16") || suffixUpper.contains("BF16") || suffixUpper.contains("INT") || suffixUpper.contains("FP16") || suffixUpper.contains("FP8")
+        let likelyQuant = suffixUpper.contains("Q") || suffixUpper.contains("IQ") || suffixUpper.contains("F16") || suffixUpper.contains("BF16") || suffixUpper.contains("INT") || suffixUpper.contains("FP16") || suffixUpper.contains("FP8") || suffixUpper.contains("F32")
         if likelyQuant {
             return model.name[..<openIndex].trimmingCharacters(in: .whitespacesAndNewlines)
         }
@@ -481,12 +497,6 @@ class ModelDownloadViewModel: ObservableObject {
         markPending(model.id)
         
         let task = Task {
-            do {
-                try RunAnywhere.initialize(environment: .development)
-            } catch {
-                // Initialization may already be in progress/complete in other flows.
-            }
-
             let destinationDir: URL
             do {
                 destinationDir = try destinationDirectory(for: model)
@@ -505,7 +515,7 @@ class ModelDownloadViewModel: ObservableObject {
             do {
                 try await ModelDownloader.shared.downloadModel(
                     model,
-                    hfToken: nil,
+                    hfToken: huggingFaceToken,
                     destinationDir: destinationDir,
                     onProgress: { update in
                         Task { @MainActor in
@@ -524,7 +534,6 @@ class ModelDownloadViewModel: ObservableObject {
                     self.refreshStatuses()
                 }
 
-                _ = await RunAnywhere.discoverDownloadedModels()
             } catch is CancellationError {
                 await MainActor.run {
                     self.downloadStates[model.id] = .paused
@@ -553,6 +562,10 @@ class ModelDownloadViewModel: ObservableObject {
             }
         }
         downloadTasks[model.id] = task
+    }
+
+    private var huggingFaceToken: String? {
+        AppSettings.shared.effectiveHfToken
     }
 
     func pauseDownload(_ id: String) {
@@ -652,6 +665,7 @@ struct ModelRowView: View {
     let onResume: () -> Void
     let onDelete: () -> Void
     let onExpand: () -> Void
+    var onEditPromptTemplate: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -743,6 +757,47 @@ struct ModelRowView: View {
                             .lineLimit(1)
                     }
                     .padding(.horizontal, 16)
+
+                    if model.source == "Custom" {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Label(settings.localized("prompt_template"), systemImage: "text.quote")
+                                    .font(.caption.bold())
+                                    .foregroundColor(.white.opacity(0.85))
+                                Spacer()
+                                Button(action: { onEditPromptTemplate?() }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "pencil")
+                                        Text(settings.localized("edit"))
+                                    }
+                                    .font(.caption.bold())
+                                    .foregroundColor(ApolloPalette.accentStrong)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(ApolloPalette.accentStrong.opacity(0.12))
+                                    .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if let template = model.promptTemplate, !template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(template)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .lineLimit(3)
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            } else {
+                                Text(settings.localized("prompt_template_none"))
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.45))
+                                    .italic()
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
 
                     Text(settings.localized("model_download_interrupted_warning"))
                         .font(.caption)
@@ -893,6 +948,7 @@ struct ModelDownloadScreen: View {
     @StateObject private var purchases = PurchaseManager.shared
     @State private var showImportSheet = false
     @State private var showPremiumForImport = false
+    @State private var editingTemplateModel: AIModel? = nil
     var onNavigateBack: () -> Void
     var onShowPremium: (() -> Void)? = nil
 
@@ -919,6 +975,7 @@ struct ModelDownloadScreen: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
+                .apolloTopScrollEdgeHidden()
                 .background(.ultraThinMaterial)
                 .overlay(alignment: .bottom) {
                     Rectangle()
@@ -986,7 +1043,8 @@ struct ModelDownloadScreen: View {
                                                     onPause:    { vm.pauseDownload(model.id) },
                                                     onResume:   { vm.resumeDownload(model.id) },
                                                     onDelete:   { vm.deleteModel(model.id) },
-                                                    onExpand:   { vm.toggleExpand(model.id) }
+                                                    onExpand:   { vm.toggleExpand(model.id) },
+                                                    onEditPromptTemplate: { editingTemplateModel = model }
                                                 )
                                             }
                                         }
@@ -999,12 +1057,13 @@ struct ModelDownloadScreen: View {
                     .padding(.top, 24)
                     .padding(.bottom, 24)
                 }
+                .apolloTopScrollEdgeFade()
             }
         }
         .navigationTitle(settings.localized("ai_models"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
         .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloTopScrollEdgeHidden()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -1035,13 +1094,16 @@ struct ModelDownloadScreen: View {
                 .accessibilityLabel(settings.localized("import_external_model"))
             }
         }
-        .sheet(isPresented: $showImportSheet) {
+        .apolloSheet(isPresented: $showImportSheet) {
             ImportExternalModelSheet(vm: vm)
+                .environmentObject(settings)
+        }
+        .apolloSheet(item: $editingTemplateModel) { model in
+            EditPromptTemplateSheet(model: model, vm: vm)
                 .environmentObject(settings)
         }
         .onAppear {
             Task {
-                try? await RunAnywhere.completeServicesInitialization()
                 vm.refreshStatuses()
                 vm.resumePendingDownloads()
             }
@@ -1100,6 +1162,116 @@ struct CategoryTab: View {
     }
 }
 
+// MARK: - Edit Prompt Template Sheet
+
+struct EditPromptTemplateSheet: View {
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.dismiss) private var dismiss
+    let model: AIModel
+    @ObservedObject var vm: ModelDownloadViewModel
+
+    @State private var promptTemplate: String = ""
+
+    init(model: AIModel, vm: ModelDownloadViewModel) {
+        self.model = model
+        self.vm = vm
+        _promptTemplate = State(initialValue: model.promptTemplate ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ApolloLiquidBackground()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Model info header
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(model.name)
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text(model.modelFormat.rawValue.uppercased())
+                                    .font(.caption2.bold())
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(ApolloPalette.accentStrong.opacity(0.2))
+                                    .foregroundColor(ApolloPalette.accentStrong)
+                                    .clipShape(Capsule())
+                            }
+                            Text(model.url)
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.12), lineWidth: 1))
+
+                        // Prompt template editor
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(settings.localized("prompt_template"))
+                                    .font(.caption.bold())
+                                    .foregroundColor(.white.opacity(0.6))
+                                Spacer()
+                                if !promptTemplate.isEmpty {
+                                    Button(settings.localized("clear")) {
+                                        promptTemplate = ""
+                                    }
+                                    .font(.caption.bold())
+                                    .foregroundColor(ApolloPalette.destructive)
+                                }
+                            }
+
+                            HStack {
+                                TextField(settings.localized("prompt_template_placeholder"), text: $promptTemplate, axis: .vertical)
+                                    .lineLimit(5...15)
+                                    .foregroundColor(.white)
+                                    .font(.system(.subheadline, design: .monospaced))
+                            }
+                            .padding(12)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.1), lineWidth: 1))
+
+                            Text(settings.localized("prompt_template_hint"))
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.45))
+                        }
+
+                        Spacer(minLength: 20)
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle(settings.localized("edit_prompt_template"))
+            .navigationBarTitleDisplayMode(.inline)
+            .apolloNavigationBackground()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(settings.localized("cancel")) {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(settings.localized("save")) {
+                        vm.updatePromptTemplate(for: model.id, promptTemplate: promptTemplate)
+                        dismiss()
+                    }
+                    .bold()
+                    .foregroundColor(.white)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Import External Model Sheet
 
 struct ImportExternalModelSheet: View {
@@ -1111,6 +1283,8 @@ struct ImportExternalModelSheet: View {
     @State private var selectedFileName = ""
     @State private var selectedFileURL: URL? = nil
     @State private var supportsVision = false
+    @State private var supportsGpu = true
+    @State private var supportsMtp = false
     @State private var projectorFileName = ""
     @State private var projectorFileURL: URL? = nil
     @State private var contextWindowSize = "4096"
@@ -1119,6 +1293,177 @@ struct ImportExternalModelSheet: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var isImporting = false
+    @State private var promptTemplate = ""
+    @State private var modelFormat: ModelFormat = .gguf
+    @State private var hfQuery = ""
+    @State private var hfFiles: [HuggingFaceImportFile] = []
+    @State private var isSearchingHuggingFace = false
+    @State private var selectedHuggingFaceModel: HuggingFaceImportFile?
+    @State private var selectedHuggingFaceProjector: HuggingFaceImportFile?
+
+    @ViewBuilder
+    private var importFormFields: some View {
+        // Model name
+        importField(label: settings.localized("model_name")) {
+            TextField(settings.localized("model_name"), text: $modelName)
+                .foregroundColor(.white)
+        }
+
+        Picker(settings.localized("model_format"), selection: $modelFormat) {
+            Text("GGUF").tag(ModelFormat.gguf)
+            Text("LiteRT-LM").tag(ModelFormat.litertlm)
+        }
+        .pickerStyle(.segmented)
+        .onChange(of: modelFormat) { _, _ in
+            supportsVision = false
+            projectorFileURL = nil
+            projectorFileName = ""
+            selectedHuggingFaceProjector = nil
+        }
+
+        HuggingFaceSearchPanel(
+            query: $hfQuery,
+            files: $hfFiles,
+            isSearching: $isSearchingHuggingFace,
+            selectedModel: $selectedHuggingFaceModel,
+            modelName: $modelName,
+            modelFormat: modelFormat,
+            onSearch: { await searchHuggingFace() }
+        )
+
+        // File import remains available alongside Hugging Face search.
+        importField(label: modelFormat == .gguf ? "GGUF File" : "LiteRT-LM File") {
+            Button { showFilePicker = true } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.badge.plus")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Text(selectedFileName.isEmpty ? settings.localized("select_model_file") : selectedFileName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundColor(selectedFileName.isEmpty ? .white.opacity(0.5) : .white)
+                    Spacer()
+                    if !selectedFileName.isEmpty {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [UTType.data], allowsMultipleSelection: false) { result in
+            handleFileSelected(result: result)
+        }
+
+        // GGUF declares its own context length in the file header.
+        if modelFormat != .gguf {
+            importField(label: settings.localized("context_window_size")) {
+                TextField("4096", text: $contextWindowSize)
+                    .keyboardType(.numberPad)
+                    .foregroundColor(.white)
+            }
+        }
+
+        // Prompt template (optional)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(settings.localized("prompt_template_optional"))
+                .font(.caption.bold())
+                .foregroundColor(.white.opacity(0.55))
+            VStack(alignment: .leading, spacing: 4) {
+                glassRow {
+                    TextField(settings.localized("prompt_template_placeholder"), text: $promptTemplate, axis: .vertical)
+                        .lineLimit(3...6)
+                        .foregroundColor(.white)
+                        .font(.system(.caption, design: .monospaced))
+                }
+                Text(settings.localized("prompt_template_hint"))
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.4))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var visionSection: some View {
+        // Feature toggles for all model formats
+        glassRow {
+            Text(settings.localized("supports_vision"))
+                .font(.subheadline)
+                .foregroundColor(.white)
+            Spacer()
+            Toggle("", isOn: $supportsVision)
+                .labelsHidden()
+                .tint(ApolloPalette.accentStrong)
+        }
+
+        if modelFormat == .litertlm {
+            glassRow {
+                Text(settings.localized("supports_gpu"))
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                Spacer()
+                Toggle("", isOn: $supportsGpu)
+                    .labelsHidden()
+                    .tint(ApolloPalette.accentStrong)
+            }
+            glassRow {
+                Text(settings.localized("supports_mtp"))
+                    .font(.subheadline)
+                    .foregroundColor(.white)
+                Spacer()
+                Toggle("", isOn: $supportsMtp)
+                    .labelsHidden()
+                    .tint(ApolloPalette.accentStrong)
+            }
+        }
+
+        // Vision projector file picker (only GGUF needs a separate mmproj file)
+        if modelFormat == .gguf && supportsVision {
+            importField(label: "Vision Projector") {
+                Button { showProjectorPicker = true } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "camera.badge.plus")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                        Text(projectorFileName.isEmpty ? (settings.localized("select") + " Vision Projector") : projectorFileName)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundColor(projectorFileName.isEmpty ? .white.opacity(0.5) : .white)
+                        Spacer()
+                        if !projectorFileName.isEmpty {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .fileImporter(isPresented: $showProjectorPicker, allowedContentTypes: [UTType.data], allowsMultipleSelection: false) { result in
+                handleProjectorSelected(result: result)
+            }
+        }
+
+        // Show HF projectors when a GGUF model is selected (auto-enables vision on pick)
+        if modelFormat == .gguf, let selectedRepo = selectedHuggingFaceModel?.repo {
+            let projectorFiles = hfFiles.filter { $0.isProjector && $0.repo == selectedRepo }
+            if !projectorFiles.isEmpty {
+                ForEach(projectorFiles) { file in
+                    Button {
+                        selectedHuggingFaceProjector = file
+                        projectorFileURL = nil
+                        projectorFileName = file.path
+                        supportsVision = true
+                    } label: {
+                        Text(file.path).lineLimit(1)
+                    }
+                    .font(.caption).foregroundColor(.white.opacity(0.8))
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -1128,82 +1473,9 @@ struct ImportExternalModelSheet: View {
                 ScrollView {
                     VStack(spacing: 14) {
 
-                        // Model name
-                        importField(label: settings.localized("model_name")) {
-                            TextField(settings.localized("model_name"), text: $modelName)
-                                .foregroundColor(.white)
-                        }
+                        importFormFields
 
-                        // GGUF file picker
-                        importField(label: "GGUF File") {
-                            Button { showFilePicker = true } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "doc.badge.plus")
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
-                                    Text(selectedFileName.isEmpty ? settings.localized("select_model_file") : selectedFileName)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .foregroundColor(selectedFileName.isEmpty ? .white.opacity(0.5) : .white)
-                                    Spacer()
-                                    if !selectedFileName.isEmpty {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [UTType.data], allowsMultipleSelection: false) { result in
-                            handleFileSelected(result: result)
-                        }
-
-                        // Context window size
-                        importField(label: settings.localized("context_window_size")) {
-                            TextField("4096", text: $contextWindowSize)
-                                .keyboardType(.numberPad)
-                                .foregroundColor(.white)
-                        }
-
-                        // Vision toggle
-                        glassRow {
-                            Text(settings.localized("supports_vision"))
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                            Spacer()
-                            Toggle("", isOn: $supportsVision)
-                                .labelsHidden()
-                                .tint(ApolloPalette.accentStrong)
-                        }
-
-                        // Vision projector picker
-                        if supportsVision {
-                            importField(label: "Vision Projector") {
-                                Button { showProjectorPicker = true } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: "camera.badge.plus")
-                                            .font(.system(size: 15, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
-                                        Text(projectorFileName.isEmpty ? (settings.localized("select") + " Vision Projector") : projectorFileName)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                            .foregroundColor(projectorFileName.isEmpty ? .white.opacity(0.5) : .white)
-                                        Spacer()
-                                        if !projectorFileName.isEmpty {
-                                            Image(systemName: "checkmark")
-                                                .font(.system(size: 12, weight: .semibold))
-                                                .foregroundColor(.white.opacity(0.7))
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .fileImporter(isPresented: $showProjectorPicker, allowedContentTypes: [UTType.data], allowsMultipleSelection: false) { result in
-                                handleProjectorSelected(result: result)
-                            }
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
+                        visionSection
 
                         // Error message
                         if showError {
@@ -1225,7 +1497,7 @@ struct ImportExternalModelSheet: View {
             }
             .navigationTitle(settings.localized("import_external_model"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(settings.localized("cancel")) { dismiss() }
@@ -1266,8 +1538,8 @@ struct ImportExternalModelSheet: View {
 
     private var canImport: Bool {
         !modelName.trimmingCharacters(in: .whitespaces).isEmpty
-            && selectedFileURL != nil
-            && (!supportsVision || projectorFileURL != nil)
+            && (selectedFileURL != nil || selectedHuggingFaceModel != nil)
+            && (!supportsVision || projectorFileURL != nil || selectedHuggingFaceProjector != nil)
     }
 
     private func handleFileSelected(result: Result<[URL], Error>) {
@@ -1275,12 +1547,12 @@ struct ImportExternalModelSheet: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             let ext = url.pathExtension.lowercased()
-            guard ext == "gguf" else {
+            guard ext == modelFormat.rawValue else {
                 showError = true
                 errorMessage = settings.localized("unsupported_file_format")
                 return
             }
-            if url.lastPathComponent.lowercased().contains("mmproj") {
+            if modelFormat == .gguf && url.lastPathComponent.lowercased().contains("mmproj") {
                 showError = true
                 errorMessage = "Select the main GGUF model file here, not the mmproj vision projector."
                 selectedFileURL = nil
@@ -1323,37 +1595,73 @@ struct ImportExternalModelSheet: View {
 
     private func performImport() {
         let name = modelName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, let sourceURL = selectedFileURL else { return }
+        guard !name.isEmpty, selectedFileURL != nil || selectedHuggingFaceModel != nil else { return }
 
-        // Duplicate name check
         if vm.models.contains(where: { $0.name == name }) {
             showError = true
             errorMessage = String(format: settings.localized("model_name_already_exists"), name)
             return
         }
 
-        let contextSize = Int(contextWindowSize) ?? 4096
+        // Remote GGUF headers become available after download; the runtime reads them then.
+        let contextSize = modelFormat == .gguf ? 4096 : (Int(contextWindowSize) ?? 4096)
+        let templateValue = promptTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        let modelId = name.lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .filter { $0.isLetter || $0.isNumber || $0 == "_" }
+            + "_custom"
+
+        if let remoteModel = selectedHuggingFaceModel {
+            var additionalURLs: [String] = []
+            if supportsVision, let remoteProjector = selectedHuggingFaceProjector {
+                additionalURLs.append(remoteProjector.downloadURL.absoluteString)
+            }
+
+            let model = AIModel(
+                id: modelId,
+                name: name,
+                description: "Imported \(modelFormat == .gguf ? "GGUF" : "LiteRT-LM") model",
+                url: remoteModel.downloadURL.absoluteString,
+                category: supportsVision ? .multimodal : .text,
+                sizeBytes: remoteModel.size + (selectedHuggingFaceProjector?.size ?? 0),
+                source: "Custom",
+                supportsVision: supportsVision,
+                supportsAudio: false,
+                supportsThinking: false,
+                supportsGpu: supportsGpu,
+                supportsMtp: modelFormat == .litertlm ? supportsMtp : true,
+                requirements: ModelRequirements(minRamGB: max(2, Int(remoteModel.size / 1_073_741_824) + 1), recommendedRamGB: max(4, Int(remoteModel.size / 1_073_741_824) + 2)),
+                contextWindowSize: contextSize,
+                modelFormat: modelFormat,
+                additionalFiles: additionalURLs,
+                promptTemplate: templateValue.isEmpty ? nil : templateValue
+            )
+
+            let success = vm.addExternalModel(model)
+            if success {
+                vm.downloadStates[model.id] = .notDownloaded
+                vm.startDownload(model)
+                dismiss()
+            } else {
+                showError = true
+                errorMessage = String(format: settings.localized("model_name_already_exists"), name)
+            }
+            return
+        }
+
+        // Local file import
         isImporting = true
-
         Task {
-            let modelId = name.lowercased()
-                .replacingOccurrences(of: " ", with: "_")
-                .filter { $0.isLetter || $0.isNumber || $0 == "_" }
-                + "_custom"
-
-            // Custom GGUFs must live in the SDK-managed folder so RunAnywhere.loadModel(id)
-            // resolves the same file the model registry points to.
             let importDir = ModelDownloadViewModel.customModelDirectory(for: modelId)
             try? FileManager.default.createDirectory(at: importDir, withIntermediateDirectories: true)
 
-            // Copy the GGUF file — security-scoped access required
-            let accessing = sourceURL.startAccessingSecurityScopedResource()
-            defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
-
+            let sourceURL = selectedFileURL!
             let destFile = importDir.appendingPathComponent(sourceURL.lastPathComponent)
             try? FileManager.default.removeItem(at: destFile)
             do {
+                let accessing = sourceURL.startAccessingSecurityScopedResource()
+                defer { if accessing { sourceURL.stopAccessingSecurityScopedResource() } }
                 try FileManager.default.copyItem(at: sourceURL, to: destFile)
             } catch {
                 await MainActor.run {
@@ -1364,13 +1672,12 @@ struct ImportExternalModelSheet: View {
                 return
             }
 
-            // Get file size
             let fileSize = (try? FileManager.default.attributesOfItem(atPath: destFile.path)[.size] as? Int64) ?? 0
 
             let model = AIModel(
                 id: modelId,
                 name: name,
-                description: "Imported GGUF model",
+                description: "Imported \(modelFormat == .gguf ? "GGUF" : "LiteRT-LM") model",
                 url: destFile.path,
                 category: supportsVision ? .multimodal : .text,
                 sizeBytes: fileSize,
@@ -1378,17 +1685,20 @@ struct ImportExternalModelSheet: View {
                 supportsVision: supportsVision,
                 supportsAudio: false,
                 supportsThinking: false,
-                supportsGpu: true,
+                supportsGpu: supportsGpu,
+                supportsMtp: modelFormat == .litertlm ? supportsMtp : true,
                 requirements: ModelRequirements(minRamGB: max(2, Int(fileSize / 1_073_741_824) + 1), recommendedRamGB: max(4, Int(fileSize / 1_073_741_824) + 2)),
-                contextWindowSize: contextSize,
-                modelFormat: .gguf,
-                additionalFiles: []
+                contextWindowSize: modelFormat == .gguf
+                    ? (GGUFLayerLimits.readContextLength(from: destFile) ?? contextSize)
+                    : contextSize,
+                modelFormat: modelFormat,
+                additionalFiles: [],
+                promptTemplate: templateValue.isEmpty ? nil : templateValue
             )
 
             await MainActor.run {
                 let success = vm.addExternalModel(model)
                 if success {
-                    // Import vision projector if selected
                     if supportsVision, let projURL = projectorFileURL {
                         let pAccessing = projURL.startAccessingSecurityScopedResource()
                         defer { if pAccessing { projURL.stopAccessingSecurityScopedResource() } }
@@ -1403,5 +1713,149 @@ struct ImportExternalModelSheet: View {
                 }
             }
         }
+    }
+
+    private func searchHuggingFace() async {
+        isSearchingHuggingFace = true
+        defer { isSearchingHuggingFace = false }
+        do { hfFiles = try await HuggingFaceImportClient.search(query: hfQuery, format: modelFormat, token: huggingFaceToken) }
+        catch { showError = true; errorMessage = error.localizedDescription }
+    }
+
+    private var huggingFaceToken: String? {
+        settings.effectiveHfToken
+    }
+
+    private func downloadHuggingFaceFile(_ file: HuggingFaceImportFile, to destination: URL) async throws {
+        var currentToken: String? = nil // Try without token first
+        while true {
+            var request = URLRequest(url: file.downloadURL)
+            if let currentToken { request.setValue("Bearer \(currentToken)", forHTTPHeaderField: "Authorization") }
+            let (temporaryURL, response) = try await URLSession.shared.download(for: request)
+            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                if (http.statusCode == 401 || http.statusCode == 403) && currentToken == nil, let huggingFaceToken {
+                    // Gated repo: retry with token
+                    currentToken = huggingFaceToken
+                    continue
+                }
+                if http.statusCode == 401 || http.statusCode == 403 {
+                    throw NSError(domain: "HuggingFace", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "Access denied (HTTP \(http.statusCode)). This model may be gated — set a Hugging Face token in Settings."])
+                }
+                throw NSError(domain: "HuggingFace", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: "Download failed (HTTP \(http.statusCode))"])
+            }
+            try FileManager.default.moveItem(at: temporaryURL, to: destination)
+            break
+        }
+    }
+}
+
+private struct HuggingFaceImportFile: Identifiable {
+    let repo: String
+    let path: String
+    let size: Int64
+    var id: String { "\(repo)/\(path)" }
+    var isProjector: Bool { path.lowercased().contains("mmproj") || path.lowercased().contains("projector") }
+    var sizeLabel: String { ByteCountFormatter.string(fromByteCount: size, countStyle: .file) }
+    var downloadURL: URL { URL(string: "https://huggingface.co/\(repo)/resolve/main/\(path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)")! }
+}
+
+private struct HuggingFaceSearchPanel: View {
+    @EnvironmentObject private var settings: AppSettings
+    @Binding var query: String
+    @Binding var files: [HuggingFaceImportFile]
+    @Binding var isSearching: Bool
+    @Binding var selectedModel: HuggingFaceImportFile?
+    @Binding var modelName: String
+    let modelFormat: ModelFormat
+    let onSearch: () async -> Void
+
+    @State private var currentPage = 0
+    private let pageSize = 10
+
+    private var nonProjectorFiles: [HuggingFaceImportFile] { files.filter { !$0.isProjector } }
+    private var totalPages: Int { max(1, Int(ceil(Double(nonProjectorFiles.count) / Double(pageSize)))) }
+    private var pagedFiles: [HuggingFaceImportFile] {
+        let start = currentPage * pageSize
+        let end = min(start + pageSize, nonProjectorFiles.count)
+        guard start < nonProjectorFiles.count else { return [] }
+        return Array(nonProjectorFiles[start..<end])
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(settings.localized("search_huggingface"))
+                .font(.caption.bold()).foregroundColor(.white.opacity(0.55))
+            HStack {
+                TextField(settings.localized("search_huggingface_placeholder"), text: $query)
+                    .foregroundColor(.white)
+                Button {
+                    Task {
+                        currentPage = 0
+                        await onSearch()
+                    }
+                } label: {
+                    if isSearching { ProgressView().tint(.white) }
+                    else { Image(systemName: "magnifyingglass") }
+                }
+                .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
+            }
+            .padding(12).background(.ultraThinMaterial).clipShape(RoundedRectangle(cornerRadius: 10))
+            if !nonProjectorFiles.isEmpty {
+                Text(settings.localized("huggingface_results"))
+                    .font(.caption).foregroundColor(.white.opacity(0.55))
+                ForEach(pagedFiles) { file in
+                    Button {
+                        selectedModel = file
+                        modelName = file.path.replacingOccurrences(of: ".\(modelFormat.rawValue)", with: "")
+                    } label: {
+                        HStack { Text("\(file.repo)/\(file.path)").lineLimit(1); Spacer(); Text(file.sizeLabel).font(.caption) }
+                            .foregroundColor(selectedModel?.id == file.id ? ApolloPalette.accentStrong : .white)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if totalPages > 1 {
+                    HStack {
+                        Button { currentPage -= 1 } label: { Text("‹").foregroundColor(.white) }
+                            .disabled(currentPage <= 0)
+                        Spacer()
+                        Text("\(currentPage + 1) / \(totalPages)")
+                            .font(.caption).foregroundColor(.white.opacity(0.7))
+                        Spacer()
+                        Button { currentPage += 1 } label: { Text("›").foregroundColor(.white) }
+                            .disabled(currentPage >= totalPages - 1)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+        }
+    }
+}
+
+private enum HuggingFaceImportClient {
+    private struct Repo: Decodable { let id: String }
+    private struct TreeEntry: Decodable { let path: String; let size: Int64?; let type: String? }
+    static func search(query: String, format: ModelFormat, token: String?) async throws -> [HuggingFaceImportFile] {
+        let libraryFilter = format == .litertlm ? "litert-lm" : format.rawValue
+        var request = URLRequest(url: URL(string: "https://huggingface.co/api/models?search=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)&filter=\(libraryFilter)&limit=20")!)
+        var (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, (http.statusCode == 401 || http.statusCode == 403), let token {
+            // Gated/protected query: retry with token
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            (data, response) = try await URLSession.shared.data(for: request)
+        }
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+        let repos = try JSONDecoder().decode([Repo].self, from: data)
+        var results: [HuggingFaceImportFile] = []
+        for repo in repos {
+            var treeRequest = URLRequest(url: URL(string: "https://huggingface.co/api/models/\(repo.id)/tree/main?recursive=true&expand=true")!)
+            var treeResult = try? await URLSession.shared.data(for: treeRequest)
+            if let (_, treeResp) = treeResult, let treeHTTP = treeResp as? HTTPURLResponse, (treeHTTP.statusCode == 401 || treeHTTP.statusCode == 403), let token {
+                treeRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                treeResult = try? await URLSession.shared.data(for: treeRequest)
+            }
+            guard let (treeData, treeResponse) = treeResult, let treeHTTP = treeResponse as? HTTPURLResponse, (200...299).contains(treeHTTP.statusCode), let entries = try? JSONDecoder().decode([TreeEntry].self, from: treeData) else { continue }
+            results += entries.filter { $0.type == "file" && $0.path.lowercased().hasSuffix(".\(format.rawValue)") }.map { HuggingFaceImportFile(repo: repo.id, path: $0.path, size: $0.size ?? 0) }
+        }
+        return results.sorted { $0.size < $1.size }
     }
 }

@@ -42,7 +42,6 @@ import com.llmhub.llmhub.ui.components.SectionHeader
 import com.llmhub.llmhub.viewmodels.ChatViewModel
 import com.llmhub.llmhub.viewmodels.ChatViewModelFactory
 import com.llmhub.llmhub.LlmHubApplication
-import com.llmhub.llmhub.ads.BannerAd
 import kotlinx.coroutines.launch
 import android.util.Log
 
@@ -325,11 +324,12 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .consumeWindowInsets(paddingValues)
+                    .imePadding()
                     .pointerInput(Unit) {
                         // Dismiss keyboard when tapping anywhere in the chat window
                         detectTapGestures(onTap = { focusManager.clearFocus() })
                     }
-                    // REMOVED imePadding() from here
             ) {
                 // Messages list
                 LazyColumn(
@@ -417,13 +417,7 @@ fun ChatScreen(
                     }
                 }
 
-                // Banner ad for free users — sits above the message input
-                if (!appIsPremiumForSearch) {
-                    BannerAd(modifier = Modifier.fillMaxWidth())
-                }
-
                 // Message input
-                Box(modifier = Modifier.imePadding()) {
                 MessageInput(
                     onSendMessage = { text, attachmentUri, audioData ->
                         // Triple-layer keyboard dismissal for maximum reliability
@@ -431,7 +425,7 @@ fun ChatScreen(
                         focusManager.clearFocus()
                         viewModel.sendMessage(context, text, attachmentUri, audioData)
                     },
-                    enabled = !isLoading && !isLoadingModel && currentChat != null,
+                    enabled = currentChat != null,
                     supportsAttachments = true, // Enable attachments for all models
                     supportsVision = viewModel.currentModelSupportsVision(), // Only show images for vision models
                     supportsAudio = viewModel.currentModelSupportsAudio(), // Only show audio for audio models
@@ -460,7 +454,6 @@ fun ChatScreen(
                         { viewModel.toggleWebSearch() }
                     } else null
                 )
-                }
             }
         }
     }

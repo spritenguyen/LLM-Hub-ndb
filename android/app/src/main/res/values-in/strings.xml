@@ -73,12 +73,12 @@
     <string name="github_repository">Repositori GitHub</string>
     <string name="acknowledgments">Ucapan Terima Kasih</string>
     <string name="acknowledgments_text">Terima kasih khusus kepada Google, Meta, Microsoft, IBM, dan komunitas HuggingFace karena telah menyediakan model LLM luar biasa yang menggerakkan aplikasi ini. Proyek ini juga bergantung pada karya luar biasa dari komunitas pengembang Android dan ekosistem sumber terbuka.</string>
-    <string name="sd_models_credit">Model generasi gambar didukung oleh implementasi Stable Diffusion xororz menggunakan backend Qualcomm QNN (NPU) dan Alibaba MNN (CPU).</string>
+    <string name="sd_models_credit">Model generasi gambar didukung oleh implementasi Stable Diffusion xororz menggunakan backend Qualcomm QNN (NPU) dan CPU.</string>
     <string name="nexa_sdk_credit">Inferensi model GGUF didukung oleh Nexa SDK.</string>
     <string name="ai_thinking">AI sedang berpikir...</string>
     <string name="thinking_label">Pemikiran</string>
     <string name="thinking_tokens">Pemikiran (%1$d token)</string>
-    <string name="version_number">Versi 3.8.3</string>
+    <string name="version_number">Versi 4.4.2</string>
     <string name="app_version">Versi Aplikasi</string>
     
     <!-- Terms of Service -->
@@ -410,6 +410,7 @@
     <string name="supports_vision">Mendukung Visi</string>
     <string name="supports_audio">Mendukung Audio</string>
     <string name="supports_gpu">Mendukung GPU</string>
+    <string name="supports_mtp">Mendukung MTP</string>
     <string name="model_format">Format Model</string>
     <string name="context_window_size">Ukuran Jendela Konteks</string>
     <string name="import_model">Impor Model</string>
@@ -474,7 +475,8 @@
     <string name="translator_auto_detect">Deteksi Otomatis</string>
     <string name="translator_translate">Terjemahkan</string>
     <string name="translator_result">Terjemahan</string>
-    <string name="translator_requires_gemma3n">Fitur ini memerlukan model Gemma-3n atau Gemma-4 E2B/E4B. Harap unduh satu dari layar Model.</string>
+    <string name="translator_requires_gemma3n">Model LLM apa pun dapat digunakan untuk terjemahan. Model Gemma 4 direkomendasikan untuk performa multibahasa terbaik.</string>
+    <string name="translator_load_model_desc">Unduh model LLM apa pun untuk mulai menerjemahkan. Model Gemma 4 direkomendasikan untuk performa multibahasa terbaik.</string>
     
     <!-- Transcriber Screen -->
     <string name="transcriber_title">Transkriptor Offline</string>
@@ -564,6 +566,7 @@
     <string name="lang_bulgarian">Bulgaria</string>
     <string name="lang_burmese">Burma</string>
     <string name="lang_catalan">Katalan</string>
+    <string name="lang_central_kurdish">Kurdi Tengah (Sorani)</string>
     <string name="lang_chinese">Tionghoa (Sederhana)</string>
     <string name="lang_chinese_traditional">Tionghoa (Tradisional)</string>
     <string name="lang_croatian">Kroasia</string>
@@ -810,9 +813,10 @@
     <!-- Premium / IAP -->
     <string name="premium_title">LLM Hub Premium Seumur Hidup</string>
     <string name="premium_subtitle">Buka pengalaman penuh</string>
-    <string name="premium_feature_no_ads">Tanpa iklan, selamanya</string>
     <string name="premium_feature_vibe_coder">VibeCoder – Generator kode AI</string>
     <string name="premium_feature_image_gen">Generator gambar – seni AI di perangkat</string>
+    <string name="premium_feature_creaitors">creAItors – buat pendamping AI</string>
+    <string name="premium_feature_vibevoice">VibeVoice – obrolan suara AI bebas genggam</string>
     <string name="premium_feature_tts">Pembacaan otomatis teks ke suara</string>
     <string name="premium_feature_import_models">Import model eksternal</string>
     <string name="premium_feature_web_search">Pencarian Web – hasil internet langsung</string>
@@ -830,10 +834,6 @@
     <string name="premium_restore_success">Pembelian berhasil dipulihkan!</string>
     <string name="premium_restore_nothing">Tidak ada pembelian sebelumnya ditemukan.</string>
     <string name="premium_go_premium">Pergi ke Premium</string>
-
-    <!-- Privacy &amp; Ads consent -->
-    <string name="privacy_ads_title">Privasi &amp; Iklan</string>
-    <string name="privacy_ads_subtitle">Kelola personalisasi iklan dan pilihan persetujuan Anda</string>
     <string name="export">Ekspor</string>
     <string name="home_section_tools">Alat</string>
     <string name="home_section_utilities">Utilitas</string>
@@ -885,7 +885,128 @@
     <string name="gemma_voice_option">Gemma</string>
         <string name="asr_model_backend"></string>
     <string name="llm_model_backend">LLM model backend</string>
+    <!-- Agent Feature -->
+    <string name="feature_agent">Agen</string>
+    <string name="feature_agent_desc">Asisten AI dengan alat dan tindakan</string>
+    <string name="premium_feature_agent">Agen – AI dengan alat dan tindakan perangkat</string>
+    <string name="agent_title">Agen</string>
+    <string name="agent_subtitle">Tanyakan apa saja — saya bisa mencari, memetakan, menjadwalkan, dan lebih banyak lagi</string>
+    <string name="agent_input_placeholder">Tanya agen Anda…</string>
+    <string name="agent_voice_mode_system">Sistem</string>
+    <string name="agent_voice_mode_whisper">Whisper</string>
+    <string name="agent_voice_mode_gemma">Gemma</string>
+    <string name="agent_tool_running">Menjalankan: %1$s</string>
+    <string name="agent_tool_success">Selesai</string>
+    <string name="agent_tool_failed">Gagal</string>
+    <string name="agent_tool_confirm_title">Izinkan Tindakan?</string>
+    <string name="agent_tool_confirm_body">Agen ingin: %1$s</string>
+    <string name="agent_tool_approve">Izinkan</string>
+    <string name="agent_tool_deny">Tolak</string>
+    <string name="agent_no_model">Unduh model untuk menggunakan Agen</string>
+    <string name="agent_map_expand">Lihat Peta Lengkap</string>
+    <string name="agent_settings_voice_mode">Mode Input Suara</string>
+    <string name="agent_settings_tools">Alat yang Diaktifkan</string>
+    <string name="agent_termux_toggle">Aktifkan Perintah Termux (lanjutan)</string>
+    <string name="agent_termux_confirm">Jalankan perintah: %1$s</string>
+    <string name="agent_calendar_confirm">Buat acara: %1$s</string>
+    <string name="agent_shortcut_confirm">Jalankan pintasan: %1$s</string>
+    <string name="agent_welcome_message">Hello! I am your AI Agent. I can search the web, display maps, manage calendar events, check weather, set alarms, send messages, and calculate hashes. How can I help you today?</string>
+    <string name="agent_no_model_android">Unduh model GGUF atau LiteRT-LM terlebih dahulu untuk menggunakan Agen</string>
+    <string name="agent_no_model_ios">Please download a model first to use Agent</string>
+    <string name="open_maps">Open Maps</string>
+    <string name="agent_processing_tool">Agent is processing tool...</string>
+    <string name="agent_termux_guide_title">Panduan Penyiapan Termux</string>
+    <string name="agent_termux_guide_desc">Di Termux, aktifkan izin eksekusi aplikasi pihak ketiga:</string>
+    <string name="agent_termux_cmd_copied">Perintah disalin ke papan klip</string>
+    <string name="agent_termux_pending_approval">Persetujuan Diperlukan</string>
+    <string name="agent_termux_run_cmd">Jalankan Perintah</string>
+    <string name="agent_termux_cancel_cmd">Batal</string>
+    <string name="agent_termux_cancelled">Dibatalkan oleh pengguna</string>
+
+    <!-- Text to Speech Feature -->
+    <string name="feature_text_to_speech">Teks ke Suara</string>
+    <string name="feature_text_to_speech_desc">Bacakan teks dengan nyaring menggunakan TTS sistem atau suara Kokoro</string>
+    <string name="tts_feature_title">Teks ke Suara</string>
+    <string name="tts_feature_subtitle">Salin dan tempel teks untuk membacakannya dengan mesin TTS dan suara yang dikonfigurasi.</string>
+    <string name="tts_input_hint">Masukkan atau tempel teks di sini...</string>
+    <string name="tts_speak_button">Baca Nyaring</string>
+    <string name="tts_stop_button">Hentikan Membaca</string>
+    <string name="tts_paste_button">Tempel Teks</string>
+    <string name="tts_clear_button">Hapus</string>
+    <string name="tts_speaking_status">Membaca nyaring…</string>
+    <string name="tts_idle_status">Siap membaca</string>
+    <string name="tts_empty_input_warning">Silakan masukkan atau tempel teks untuk dibaca.</string>
+    <string name="tts_engine_system">TTS Bawaan Sistem</string>
+    <string name="tts_engine_kokoro">Kokoro TTS</string>
+    <string name="tts_current_voice">Suara: %1$s</string>
+    <string name="tts_word_count">%1$d kata</string>
+    <string name="search_huggingface">Cari Hugging Face</string>
+    <string name="search_huggingface_placeholder">Cari model GGUF atau LiteRT-LM</string>
+    <string name="huggingface_results">Hasil Hugging Face</string>
+    <string name="download_vision_projector">Unduh proyektor visi</string>
+    <string name="huggingface_search_failed">Pencarian Hugging Face gagal</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="feature_music_generator">Generator Musik</string>
+    <string name="feature_music_generator_desc">Hasilkan musik dan efek suara langsung di perangkat</string>
+    <string name="music_generation_models">Model Generasi Musik</string>
+    <string name="music_generation_models_description">Model AI di perangkat untuk membuat trek musik dan efek suara.</string>
+    <string name="music_prompt_label">Deskripsi Musik</string>
+    <string name="prompt_hint_music">Jelaskan musik atau efek suara yang ingin dibuat...</string>
+    <string name="music_style_presets">Preset Gaya</string>
+    <string name="music_tier_select">Tingkat Generator</string>
+    <string name="music_duration_label">Durasi</string>
+    <string name="generate_music">Hasilkan Musik</string>
+    <string name="generating_music">Menghasilkan Musik...</string>
+    <string name="music_prompt_empty_warning">Masukkan deskripsi musik yang ingin Anda hasilkan.</string>
+    <string name="music_generated_success">Musik berhasil dihasilkan!</string>
+    <string name="music_saved_toast">Klip audio disimpan ke perpustakaan lokal!</string>
+    <string name="music_generator_download_model">Unduh Model Terlebih Dahulu</string>
+    <string name="music_generator_download_model_desc">Unduh model Generator Musik dari layar Model untuk mulai menghasilkan musik.</string>
+
+    <!-- MCP Agent -->
+    <string name="agent_mcp_settings">Pengaturan MCP</string>
+    <string name="agent_mcp_title">Alat MCP</string>
+    <string name="agent_mcp_description">Hubungkan server MCP dan izinkan Agen menggunakan alatnya.</string>
+    <string name="agent_mcp_transport">Transport</string>
+    <string name="agent_mcp_termux_stdio">stdio Termux</string>
+    <string name="agent_mcp_remote_http">HTTP jarak jauh</string>
+    <string name="agent_mcp_command">Perintah server MCP</string>
+    <string name="agent_mcp_termux_help">Menjalankan server MCP melalui stdio Termux. Instal paket yang diperlukan terlebih dahulu.</string>
+    <string name="agent_mcp_server_url">URL server</string>
+    <string name="agent_mcp_bearer_token">Token Bearer (opsional)</string>
+    <string name="agent_mcp_approval_notice">Setiap panggilan alat MCP memerlukan persetujuan Anda sebelum dijalankan.</string>
+    <string name="agent_mcp_connecting">Menghubungkan…</string>
+    <string name="agent_mcp_connected_tools">%1$d alat terhubung</string>
+    <string name="agent_mcp_error">Kesalahan MCP: %1$s</string>
+    <string name="agent_mcp_connect">Hubungkan</string>
+    <string name="agent_mcp_disconnect">Putuskan</string>
+    <string name="agent_mcp_tool_request">Alat MCP: %1$s</string>
+    <string name="agent_mcp_allow">Izinkan</string>
+    <string name="agent_mcp_deny">Tolak</string>
+    <string name="agent_mcp_approval_required">Persetujuan diperlukan</string>
+    <string name="agent_mcp_denied">Ditolak oleh pengguna</string>
+    <string name="agent_mcp_status">Status</string>
+    <string name="agent_termux_tool_title">Perintah shell Termux</string>
+    <string name="agent_mcp_termux_permission_required">Izinkan “Jalankan perintah di lingkungan Termux” untuk LLM Hub di Setelan Android > Aplikasi > LLM Hub > Izin > Izin tambahan.</string>
+    <string name="agent_mcp_termux_not_installed">Diperlukan Termux 0.109 atau yang lebih baru.</string>
+    <string name="agent_mcp_termux_timed_out">Termux tidak mengembalikan hasil sebelum waktu habis.</string>
+    <string name="agent_mcp_termux_run_command_unavailable">Termux versi Google Play ini tidak mendukung perintah eksternal. Gunakan Termux versi F-Droid/GitHub untuk stdio, atau pilih HTTP Jarak Jauh.</string>
+    <string name="gguf_engine">Mesin GGUF</string>
+    <string name="gguf_engine_geniex_default">GenieX (default)</string>
+    <string name="gguf_engine_llama_cpp">llama.cpp</string>
+    <string name="gguf_engine_crash_title">Mesin GGUF berhenti</string>
+    <string name="gguf_engine_crash_message">GenieX berhenti saat memuat model GGUF. Coba ubah mesin GGUF di Setelan.</string>
+    <string name="gguf_engine_open_settings">Buka Setelan</string>
+    <!-- Hugging Face Token -->
+    <string name="hf_token_title">Token Hugging Face</string>
+    <string name="hf_token_subtitle">Token akses pribadi untuk mengunduh model</string>
+    <string name="hf_token_dialog_title">Token Akses Hugging Face</string>
+    <string name="hf_token_explanation">Jika token default gagal, mencapai batas penggunaan, atau saat mengunduh model berlisensi yang disetujui, masukkan token baca pribadi Anda dari huggingface.co/settings/tokens.</string>
+    <string name="hf_token_placeholder">Masukkan token pribadi (hf_...)</string>
+    <string name="hf_token_using_default">Menggunakan token default</string>
+    <string name="hf_token_custom_active">Token khusus aktif</string>
+    <string name="hf_token_clear">Atur ulang ke default</string>
+    <string name="gguf_vulkan_setting">Backend GPU GGUF</string>
+    <string name="crash_recovery_title">Aplikasi tertutup tiba-tiba</string>
+    <string name="crash_recovery_message">Coba muat model yang lebih kecil atau gunakan CPU.</string>
 </resources>
-
-
-

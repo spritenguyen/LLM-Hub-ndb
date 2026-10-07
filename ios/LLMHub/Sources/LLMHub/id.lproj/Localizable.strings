@@ -43,34 +43,34 @@
 "about_llm_hub" = "Tentang LLM Hub";
 "about_description" = "LLM Hub adalah aplikasi sumber terbuka yang membawa kekuatan Model Bahasa Besar langsung ke perangkat seluler Anda. Rasakan percakapan AI dengan model terkini seperti Gemma, Llama, dan Phi - semuanya berjalan secara lokal di ponsel Anda untuk privasi maksimal dan aksesibilitas offline.";
 "key_features" = "Fitur Utama";
-"feature_multiple_models" = "🤖 Beberapa Model LLM: Gemma-3, Llama-3.2, Phi-4, dan Translate Gemma";
-"feature_on_device" = "📱 Pemrosesan di Perangkat: Privasi lengkap, tidak perlu internet";
-"feature_vision_support" = "🖼️ Dukungan Visi: Model multimodal yang memahami gambar";
-"feature_gpu_acceleration" = "⚡ Akselerasi GPU: Kinerja dioptimalkan pada perangkat yang didukung";
-"feature_offline_usage" = "💾 Penggunaan Offline: Mengobrol tanpa koneksi internet";
-"feature_privacy_first" = "🔒 Privasi Utama: Percakapan Anda tidak pernah meninggalkan perangkat";
-"feature_modern_ui" = "🎨 UI Modern: Antarmuka Material Design yang bersih dan intuitif";
+"feature_multiple_models" = "Beberapa Model LLM: Gemma-3, Llama-3.2, Phi-4, dan Translate Gemma";
+"feature_on_device" = "Pemrosesan di Perangkat: Privasi lengkap, tidak perlu internet";
+"feature_vision_support" = "Dukungan Visi: Model multimodal yang memahami gambar";
+"feature_gpu_acceleration" = "Akselerasi GPU: Kinerja dioptimalkan pada perangkat yang didukung";
+"feature_offline_usage" = "Penggunaan Offline: Mengobrol tanpa koneksi internet";
+"feature_privacy_first" = "Privasi Utama: Percakapan Anda tidak pernah meninggalkan perangkat";
+"feature_modern_ui" = "UI Modern: Antarmuka Material Design yang bersih dan intuitif";
 "developer_info" = "Info Pengembang";
 "about_developer_info" = "Proyek ini dikembangkan oleh penggemar yang bersemangat membuat teknologi AI lebih mudah diakses oleh semua orang. Umpan balik dan kontribusi Anda selalu diterima!";
 "tech_stack" = "Tumpukan Teknologi";
 "about_tech_stack" = "LLM Hub dibangun menggunakan Swift, SwiftUI, dan pustaka llama.cpp untuk inferensi yang efisien di perangkat.";
-"tech_kotlin_compose" = "🏗️ Dibangun dengan Kotlin dan Jetpack Compose";
-"tech_mediapipe_litert" = "🧠 Didukung oleh MediaPipe dan LiteRT";
-"tech_quantization" = "🚀 Dioptimalkan dengan kuantisasi INT4/INT8";
-"tech_gpu_acceleration" = "⚡ Akselerasi GPU melalui LiteRT XNNPACK";
-"tech_models_source" = "🔗 Model dari HuggingFace dan Google";
+"tech_kotlin_compose" = "Dibangun dengan Kotlin dan Jetpack Compose";
+"tech_mediapipe_litert" = "Didukung oleh MediaPipe dan LiteRT";
+"tech_quantization" = "Dioptimalkan dengan kuantisasi INT4/INT8";
+"tech_gpu_acceleration" = "Akselerasi GPU melalui LiteRT XNNPACK";
+"tech_models_source" = "Model dari HuggingFace dan Google";
 "contact_support" = "Kontak dan Dukungan";
 "contact_email" = "Email Kontak:";
 "source_code" = "Kode Sumber:";
 "github_repository" = "Repositori GitHub";
 "acknowledgments" = "Ucapan Terima Kasih";
 "acknowledgments_text" = "Terima kasih khusus kepada Google, Meta, Microsoft, IBM, dan komunitas HuggingFace karena telah menyediakan model LLM luar biasa yang menggerakkan aplikasi ini. Proyek ini juga bergantung pada karya luar biasa dari komunitas pengembang Android dan ekosistem sumber terbuka.";
-"sd_models_credit" = "Model generasi gambar didukung oleh implementasi Stable Diffusion xororz menggunakan backend Qualcomm QNN (NPU) dan Alibaba MNN (CPU).";
+"sd_models_credit" = "Model generasi gambar didukung oleh implementasi Stable Diffusion xororz menggunakan backend Qualcomm QNN (NPU) dan CPU.";
 "nexa_sdk_credit" = "Inferensi model GGUF didukung oleh Nexa SDK.";
 "ai_thinking" = "AI sedang berpikir...";
 "thinking_label" = "Pemikiran";
 "thinking_tokens" = "Pemikiran (%1$d token)";
-"version_number" = "Versi 3.8.3";
+"version_number" = "Versi 4.4.2";
 "app_version" = "Versi Aplikasi";
 "terms_of_service" = "Ketentuan Layanan";
 "tos_last_updated" = "Terakhir diperbarui: 16 Juli 2025";
@@ -267,6 +267,9 @@
 "remaining" = "tersisa";
 "auto_readout" = "Pembacaan Otomatis";
 "auto_readout_description" = "Membaca respons AI dengan suara keras secara otomatis setelah mengirim pesan";
+"text_to_speech_voices" = "Suara teks ke ucapan";
+"text_to_speech_voices_description" = "Pilih suara iOS untuk konten yang dibacakan";
+"tts_voices_nav_hint" = "Buka Pengaturan → Aksesibilitas → Baca & Bicara → Suara.";
 "image_copied_clipboard" = "Gambar disalin dari obrolan";
 "image_copied_to_clipboard" = "Gambar disalin ke clipboard";
 "failed_to_copy_image" = "Gagal menyalin gambar";
@@ -355,6 +358,7 @@
 "supports_vision" = "Mendukung Visi";
 "supports_audio" = "Mendukung Audio";
 "supports_gpu" = "Mendukung GPU";
+"supports_mtp" = "Mendukung MTP";
 "model_format" = "Format Model";
 "context_window_size" = "Ukuran Jendela Konteks";
 "import_model" = "Impor Model";
@@ -411,7 +415,8 @@
 "translator_auto_detect" = "Deteksi Otomatis";
 "translator_translate" = "Terjemahkan";
 "translator_result" = "Terjemahan";
-"translator_requires_gemma3n" = "Fitur ini memerlukan model Translate Gemma atau Gemma 4. Harap unduh satu dari layar Model.";
+"translator_requires_gemma3n" = "Model LLM apa pun dapat digunakan untuk terjemahan. Model Gemma 4 direkomendasikan untuk performa multibahasa terbaik.";
+"translator_load_model_desc" = "Unduh model LLM apa pun untuk mulai menerjemahkan. Model Gemma 4 direkomendasikan untuk performa multibahasa terbaik.";
 "transcriber_title" = "Transkriptor Offline";
 "transcriber_record" = "Rekam Audio";
 "transcriber_upload" = "Unggah Audio";
@@ -489,6 +494,7 @@
 "lang_bulgarian" = "Bulgaria";
 "lang_burmese" = "Burma";
 "lang_catalan" = "Katalan";
+"lang_central_kurdish" = "Kurdi Tengah (Sorani)";
 "lang_chinese" = "Tionghoa (Sederhana)";
 "lang_chinese_traditional" = "Tionghoa (Tradisional)";
 "lang_croatian" = "Kroasia";
@@ -703,7 +709,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub Premium Seumur Hidup";
 "premium_subtitle" = "Buka pengalaman penuh";
-"premium_feature_no_ads" = "Tanpa iklan, selamanya";
 "premium_feature_vibe_coder" = "VibeCoder – Generator kode AI";
 "premium_feature_image_gen" = "Generator gambar – seni AI di perangkat";
 "premium_feature_tts" = "Pembacaan otomatis teks ke suara";
@@ -725,8 +730,6 @@
 "premium_restore_success" = "Pembelian berhasil dipulihkan!";
 "premium_restore_nothing" = "Tidak ada pembelian sebelumnya ditemukan.";
 "premium_go_premium" = "Pergi ke Premium";
-"privacy_ads_title" = "Privasi & Iklan";
-"privacy_ads_subtitle" = "Kelola personalisasi iklan dan pilihan persetujuan Anda";
 "export" = "Ekspor";
 "home_section_tools" = "Alat";
 "home_section_utilities" = "Utilitas";
@@ -807,5 +810,117 @@
 "whisper_live_transcription" = "Transkripsi Langsung dengan Whisper";
 "whisper_transcribing" = "Mentranskrip dengan Whisper…";
 
+"prompt_template_optional" = "Template Prompt (Opsional)";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "Gunakan {{SYSTEM}}, {{USER}}, {{ASSISTANT}} sebagai placeholder";
+
 "on_device_ai_engine" = "MESIN AI PADA PERANGKAT";
 "secure_private" = "AMAN & PRIVAT";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "Agen";
+"feature_agent_desc" = "Asisten AI dengan alat dan tindakan";
+"premium_feature_agent" = "Agen – AI dengan alat dan tindakan perangkat";
+"agent_title" = "Agen";
+"agent_subtitle" = "Tanyakan apa saja — saya bisa mencari, memetakan, menjadwalkan, dan lebih banyak lagi";
+"agent_input_placeholder" = "Tanya agen Anda…";
+"agent_voice_mode_system" = "Sistem";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "Menjalankan: %@";
+"agent_tool_success" = "Selesai";
+"agent_tool_failed" = "Gagal";
+"agent_tool_confirm_title" = "Izinkan Tindakan?";
+"agent_tool_confirm_body" = "Agen ingin: %@";
+"agent_tool_approve" = "Izinkan";
+"agent_tool_deny" = "Tolak";
+"agent_no_model" = "Unduh model untuk menggunakan Agen";
+"agent_map_expand" = "Lihat Peta Lengkap";
+"agent_settings_voice_mode" = "Mode Input Suara";
+"agent_settings_tools" = "Alat yang Diaktifkan";
+"agent_shortcut_confirm" = "Jalankan pintasan: %@";
+"agent_calendar_confirm" = "Buat acara: %@";
+
+"agent_welcome_message" = "Halo! Saya Agen AI Anda. Saya dapat mencari di web, menampilkan peta, mengelola acara kalender, memeriksa cuaca, mengatur alarm, mengirim pesan, dan menghitung hash. Ada yang bisa saya bantu hari ini?";
+"agent_no_model_android" = "Silakan unduh model Gemma 4 E2/4B terlebih dahulu untuk menggunakan Agen";
+"agent_no_model_ios" = "Silakan unduh model terlebih dahulu untuk menggunakan Agen";
+
+"open_maps" = "Buka Peta";
+"agent_processing_tool" = "Agen sedang memproses alat...";
+
+"premium_feature_vibevoice" = "VibeVoice – AI Suara & Ucapan";
+"premium_feature_vibecoder" = "VibeCode – Pembuat Kode AI";
+"premium_feature_image_generator" = "Generator Gambar – Seni AI di Perangkat";
+"premium_feature_video_generator" = "Generator Video – Pembuatan Video AI";
+"search_huggingface" = "Cari Hugging Face";
+"search_huggingface_placeholder" = "Cari model GGUF atau LiteRT-LM";
+"huggingface_results" = "Hasil Hugging Face";
+"download_vision_projector" = "Unduh proyektor visi";
+"huggingface_search_failed" = "Pencarian Hugging Face gagal";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "Generator Musik";
+"feature_music_generator_desc" = "Hasilkan musik dan efek suara langsung di perangkat";
+"music_generation_models" = "Model Generasi Musik";
+"music_generation_models_description" = "Model AI di perangkat untuk membuat trek musik dan efek suara.";
+"music_prompt_label" = "Deskripsi Musik";
+"prompt_hint_music" = "Jelaskan musik atau efek suara yang ingin dibuat...";
+"music_style_presets" = "Preset Gaya";
+"music_tier_select" = "Tingkat Generator";
+"music_duration_label" = "Durasi";
+"generate_music" = "Hasilkan Musik";
+"generating_music" = "Menghasilkan Musik...";
+"music_prompt_empty_warning" = "Masukkan deskripsi musik yang ingin Anda hasilkan.";
+"music_generated_success" = "Musik berhasil dihasilkan!";
+"music_saved_toast" = "Klip audio disimpan ke perpustakaan lokal!";
+
+"music_generator_download_model" = "Unduh Model Terlebih Dahulu";
+"music_generator_download_model_desc" = "Unduh model Generator Musik dari layar Model untuk mulai menghasilkan musik.";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "Pengaturan MCP";
+"agent_mcp_title" = "Alat MCP";
+"agent_mcp_description" = "Hubungkan server MCP dan izinkan Agen menggunakan alatnya.";
+"agent_mcp_transport" = "Transport";
+"agent_mcp_termux_stdio" = "stdio Termux";
+"agent_mcp_remote_http" = "HTTP jarak jauh";
+"agent_mcp_command" = "Perintah server MCP";
+"agent_mcp_termux_help" = "Menjalankan server MCP melalui stdio Termux. Instal paket yang diperlukan terlebih dahulu.";
+"agent_mcp_server_url" = "URL server";
+"agent_mcp_bearer_token" = "Token Bearer (opsional)";
+"agent_mcp_approval_notice" = "Setiap panggilan alat MCP memerlukan persetujuan Anda sebelum dijalankan.";
+"agent_mcp_connecting" = "Menghubungkan…";
+"agent_mcp_connected_tools" = "%d alat terhubung";
+"agent_mcp_error" = "Kesalahan MCP: %@";
+"agent_mcp_missing_required_arguments" = "Argumen MCP wajib hilang: %@";
+"agent_mcp_connect" = "Hubungkan";
+"agent_mcp_disconnect" = "Putuskan";
+"agent_mcp_tool_request" = "Alat MCP: %@";
+"agent_mcp_allow" = "Izinkan";
+"agent_mcp_deny" = "Tolak";
+"agent_mcp_approval_required" = "Persetujuan diperlukan";
+"agent_mcp_denied" = "Ditolak oleh pengguna";
+"agent_mcp_status" = "Status";
+"agent_termux_tool_title" = "Perintah shell Termux";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "Token Hugging Face";
+"hf_token_subtitle" = "Token akses pribadi untuk mengunduh model";
+"hf_token_dialog_title" = "Token Akses Hugging Face";
+"hf_token_explanation" = "Jika token default gagal, mencapai batas penggunaan, atau saat mengunduh model berlisensi yang disetujui, masukkan token baca pribadi Anda dari huggingface.co/settings/tokens.";
+"hf_token_placeholder" = "Masukkan token pribadi (hf_...)";
+"hf_token_using_default" = "Menggunakan token default";
+"hf_token_custom_active" = "Token khusus aktif";
+"hf_token_clear" = "Atur ulang ke default";
+
+/* Edit Prompt Template */
+"edit" = "Edit";
+"prompt_template" = "Template Prompt";
+"edit_prompt_template" = "Edit Template Prompt";
+"prompt_template_none" = "Tidak ada (Default)";

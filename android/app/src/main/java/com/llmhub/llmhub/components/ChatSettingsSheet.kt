@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.llmhub.llmhub.R
 import com.llmhub.llmhub.data.LLMModel
+import com.llmhub.llmhub.data.GgufLayerLimits
 import com.llmhub.llmhub.data.ModelConfig
 import com.llmhub.llmhub.data.ModelPreferences
 import com.llmhub.llmhub.data.hasDownloadedVisionProjector
@@ -27,6 +28,7 @@ import com.llmhub.llmhub.data.requiresExternalVisionProjector
 import com.llmhub.llmhub.inference.MediaPipeInferenceService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Bottom sheet for AI Chat settings - combines model selection with model configs
@@ -61,9 +63,10 @@ fun ChatSettingsSheet(
     }
     
     // Model-specific configurations
-    val baseMaxTokensCap = remember(selectedModel) { 
-        selectedModel?.let { MediaPipeInferenceService.getMaxTokensForModelStatic(it) } ?: 2048 
-    }
+    var ggufContextLimit by remember(selectedModel?.name) { mutableStateOf<Int?>(null) }
+    val baseMaxTokensCap = (ggufContextLimit
+        ?: selectedModel?.let { MediaPipeInferenceService.getMaxTokensForModelStatic(it) }
+        ?: 2048).coerceAtLeast(1)
 
 
     
@@ -101,14 +104,14 @@ fun ChatSettingsSheet(
     }
     
     val defaultUseGpu = remember(selectedModel, isGemma4_12B) { 
-        if (isGemma4_12B) true else if (isPhi4Mini) false else selectedModel?.supportsGpu == true
+        if (selectedModel?.modelFormat == "gguf") false else if (isGemma4_12B) true else if (isPhi4Mini) false else selectedModel?.supportsGpu == true
     }
     val canUseNpuForSelectedModel by remember(selectedModel, isPhi4Mini) {
         derivedStateOf {
             selectedModel?.supportsGpu == true &&
                 !isPhi4Mini &&
                 selectedModel?.modelFormat == "gguf" &&
-                com.llmhub.llmhub.data.DeviceInfo.isQualcommNpuSupported()
+                com.llmhub.llmhub.data.DeviceInfo.isLlamaCppHexagonSupported()
         }
     }
     
@@ -133,11 +136,11 @@ fun ChatSettingsSheet(
 
     var useNpu by remember {
         mutableStateOf(
-            initialSelectedNpuDeviceId != null ||
-                (selectedModel?.modelFormat == "gguf" && com.llmhub.llmhub.data.DeviceInfo.isQualcommNpuSupported())
+            initialSelectedNpuDeviceId != null
         )
     }
     var gpuLayers by remember { mutableStateOf(999) }
+    var gpuLayerLimit by remember { mutableIntStateOf(GgufLayerLimits.UNKNOWN) }
 
     var disableVision by remember { mutableStateOf(isGemma3nModel) }
     var disableAudio by remember { mutableStateOf(isGemma3nModel) }
@@ -157,6 +160,7 @@ fun ChatSettingsSheet(
     val isThinkingOrHarmonyModel by remember(selectedModel) {
         derivedStateOf {
             selectedModel?.let { model ->
+                model.supportsThinking ||
                 model.name.contains("Thinking", ignoreCase = true) ||
                 model.name.contains("Reasoning", ignoreCase = true) ||
                 model.name.contains("gpt-oss", ignoreCase = true) ||
@@ -169,11 +173,18 @@ fun ChatSettingsSheet(
     // Load saved config when model changes
     LaunchedEffect(selectedModel?.name) {
         selectedModel?.let { model ->
-            val newBaseCap = MediaPipeInferenceService.getMaxTokensForModelStatic(model)
+            gpuLayerLimit = GgufLayerLimits.UNKNOWN
+            val (layers, fileContext) = withContext(Dispatchers.IO) {
+                GgufLayerLimits.forModel(context, model) to GgufLayerLimits.contextForModel(context, model)
+            }
+            gpuLayerLimit = layers ?: GgufLayerLimits.UNKNOWN
+            ggufContextLimit = fileContext
+            val newBaseCap = (fileContext ?: MediaPipeInferenceService.getMaxTokensForModelStatic(model)).coerceAtLeast(1)
             val newIsGemma3n = model.name.contains("Gemma-3n", ignoreCase = true)
             val newIsPhi4Mini = model.name.contains("Phi-4 Mini", ignoreCase = true)
             val newIsGemma4_12B = model.modelFormat == "litertlm" && (model.name.contains("Gemma-4 12B", ignoreCase = true) || model.name.contains("Gemma 4 12B", ignoreCase = true))
-            val newDefaultUseGpu = if (newIsGemma4_12B) true else if (newIsPhi4Mini) false else model.supportsGpu
+            val newIsGemma4Small = model.modelFormat == "litertlm" && model.name.contains("Gemma-4", ignoreCase = true) && !newIsGemma4_12B
+            val newDefaultUseGpu = if (model.modelFormat == "gguf") false else if (newIsGemma4_12B) true else if (newIsPhi4Mini) false else model.supportsGpu
             
             try {
                 val saved = modelPrefs.getModelConfig(model.name)
@@ -193,10 +204,10 @@ fun ChatSettingsSheet(
                         "CPU" -> false
                         else -> newDefaultUseGpu
                     }
-                    useNpu = if (newIsGemma4_12B) false else saved.deviceId == "dev0"
+                    useNpu = !newIsGemma4_12B && saved.backend == "GPU" && saved.deviceId == "dev0"
                     disableVision = saved.disableVision || !selectedModelSupportsVisionInput
                     disableAudio = saved.disableAudio
-                    gpuLayers = saved.nGpuLayers
+                    gpuLayers = saved.nGpuLayers.coerceIn(0, gpuLayerLimit)
                     enableThinking = saved.enableThinking
                     agentToolsEnabled = saved.agentToolsEnabled
                     systemPromptText = saved.systemPrompt
@@ -212,14 +223,14 @@ fun ChatSettingsSheet(
                     topK = 64
                     topP = 0.95f
                     temperature = 1.0f
-                    val ggufNpuDefault = model.modelFormat == "gguf" && com.llmhub.llmhub.data.DeviceInfo.isQualcommNpuSupported()
                     useGpu = if (newIsGemma4_12B) true else newDefaultUseGpu
-                    useNpu = ggufNpuDefault
-                    disableVision = newIsGemma3n || !selectedModelSupportsVisionInput
-                    disableAudio = newIsGemma3n
+                    useNpu = false
+                    disableVision = newIsGemma3n || newIsGemma4Small || !selectedModelSupportsVisionInput
+                    disableAudio = newIsGemma3n || newIsGemma4Small
                     enableThinking = true
-                    agentToolsEnabled = true
+                    agentToolsEnabled = !newIsGemma4Small
                     systemPromptText = ""
+                    gpuLayers = gpuLayerLimit
                 }
             } catch (e: Exception) {
                 // Reset to defaults on error
@@ -233,14 +244,14 @@ fun ChatSettingsSheet(
                 topK = 64
                 topP = 0.95f
                 temperature = 1.0f
-                val ggufNpuDefault = selectedModel?.modelFormat == "gguf" && com.llmhub.llmhub.data.DeviceInfo.isQualcommNpuSupported()
                 useGpu = if (newIsGemma4_12B) true else newDefaultUseGpu
-                useNpu = ggufNpuDefault
-                disableVision = newIsGemma3n || !selectedModelSupportsVisionInput
-                disableAudio = newIsGemma3n
+                useNpu = false
+                disableVision = newIsGemma3n || newIsGemma4Small || !selectedModelSupportsVisionInput
+                disableAudio = newIsGemma3n || newIsGemma4Small
                 enableThinking = true
-                agentToolsEnabled = true
+                agentToolsEnabled = !newIsGemma4Small
                 systemPromptText = ""
+                gpuLayers = gpuLayerLimit
             }
         }
     }
@@ -660,7 +671,7 @@ fun ChatSettingsSheet(
                                         maxTokensText = intVal.toString()
                                     }
                                 },
-                                valueRange = 1f..baseMaxTokensCap.toFloat(),
+                                valueRange = 1f..maxOf(1f, baseMaxTokensCap.toFloat()),
                                 modifier = Modifier.weight(1f).height(36.dp),
                                 thumb = {
                                     SliderDefaults.Thumb(
@@ -792,7 +803,7 @@ fun ChatSettingsSheet(
                                 Slider(
                                     value = gpuLayers.toFloat(),
                                     onValueChange = { gpuLayers = it.toInt() },
-                                    valueRange = 0f..999f,
+                                    valueRange = 0f..gpuLayerLimit.toFloat(),
                                     modifier = Modifier.weight(1f).height(28.dp),
                                     thumb = {
                                         SliderDefaults.Thumb(
@@ -804,7 +815,7 @@ fun ChatSettingsSheet(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 OutlinedTextField(
                                     value = gpuLayers.toString(),
-                                    onValueChange = { v -> gpuLayers = v.filter { it.isDigit() }.toIntOrNull()?.coerceIn(0, 999) ?: gpuLayers },
+                                    onValueChange = { v -> gpuLayers = v.filter { it.isDigit() }.toIntOrNull()?.coerceIn(0, gpuLayerLimit) ?: gpuLayers },
                                     modifier = Modifier.width(72.dp),
                                     singleLine = true
                                 )
@@ -932,10 +943,10 @@ fun ChatSettingsSheet(
                                     }
                                     
                                     // Reset to defaults
-                                    val newMaxTokensCap = MediaPipeInferenceService.getMaxTokensForModelStatic(model)
+                                    val newMaxTokensCap = baseMaxTokensCap
                                     val newIsGemma3n = model.name.contains("Gemma-3n", ignoreCase = true)
                                     val newIsPhi4Mini = model.name.contains("Phi-4 Mini", ignoreCase = true)
-                                    val newDefaultUseGpu = if (newIsPhi4Mini) false else model.supportsGpu
+                                    val newDefaultUseGpu = if (model.modelFormat == "gguf" || newIsPhi4Mini) false else model.supportsGpu
                                     val defaultCtx = minOf(4096, newMaxTokensCap)
                                     val defaultMax = minOf(4096, defaultCtx)
                                     
@@ -948,10 +959,10 @@ fun ChatSettingsSheet(
                                     temperature = 1.0f
                                     useGpu = newDefaultUseGpu
                                     useNpu = false
-                                    disableVision = newIsGemma3n || !selectedModelSupportsVisionInput
-                                    disableAudio = newIsGemma3n
+                                    disableVision = newIsGemma3n || (isGemma4Model && !isGemma4_12B) || !selectedModelSupportsVisionInput
+                                    disableAudio = newIsGemma3n || (isGemma4Model && !isGemma4_12B)
                                     enableThinking = true
-                                    agentToolsEnabled = true
+                                    agentToolsEnabled = !(isGemma4Model && !isGemma4_12B)
                                     systemPromptText = ""
                                 }
                             },

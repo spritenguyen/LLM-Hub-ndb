@@ -73,12 +73,12 @@
     <string name="github_repository">GitHub Deposu</string>
     <string name="acknowledgments">Teşekkürler</string>
     <string name="acknowledgments_text">Bu uygulamayı destekleyen inanılmaz LLM modellerini sağladıkları için Google, Meta, Microsoft, IBM ve HuggingFace topluluğuna özel teşekkürler. Bu proje ayrıca Android geliştirme topluluğunun ve açık kaynak ekosisteminin harika çalışmalarına dayanmaktadır.</string>
-    <string name="sd_models_credit">Görüntü oluşturma modelleri, Qualcomm QNN (NPU) ve Alibaba MNN (CPU) arka uçlarını kullanan xororz\'un Stable Diffusion uygulamaları tarafından desteklenmektedir.</string>
+    <string name="sd_models_credit">Görüntü oluşturma modelleri, Qualcomm QNN (NPU) ve CPU arka uçlarını kullanan xororz\'un Stable Diffusion uygulamaları tarafından desteklenmektedir.</string>
     <string name="nexa_sdk_credit">GGUF model çıkarımı Nexa SDK tarafından desteklenmektedir.</string>
     <string name="ai_thinking">Yapay zeka düşünüyor...</string>
     <string name="thinking_label">Düşünme</string>
     <string name="thinking_tokens">Düşünme (%1$d token)</string>
-    <string name="version_number">Sürüm 3.8.3</string>
+    <string name="version_number">Sürüm 4.4.2</string>
     <string name="app_version">Uygulama Sürümü</string>
     
     <!-- Terms of Service -->
@@ -409,6 +409,7 @@
     <string name="supports_vision">Görseli Destekler</string>
     <string name="supports_audio">Sesi Destekler</string>
     <string name="supports_gpu">GPU\'yu Destekler</string>
+    <string name="supports_mtp">MTP\'yi Destekler</string>
     <string name="model_format">Model Formatı</string>
     <string name="context_window_size">Bağlam Penceresi Boyutu</string>
     <string name="import_model">Modeli İçe Aktar</string>
@@ -471,7 +472,8 @@
     <string name="translator_auto_detect">Otomatik Algıla</string>
     <string name="translator_translate">Çevir</string>
     <string name="translator_result">Çeviri</string>
-    <string name="translator_requires_gemma3n">Bu özellik bir Gemma-3n veya Gemma-4 E2B/E4B modeli gerektirir. Lütfen Modeller ekranından bir tane indirin.</string>
+    <string name="translator_requires_gemma3n">Çeviri için herhangi bir LLM modeli kullanılabilir. En iyi çok dilli performans için Gemma 4 modelleri önerilir.</string>
+    <string name="translator_load_model_desc">Çeviriye başlamak için herhangi bir LLM modeli indirin. En iyi çok dilli performans için Gemma 4 modelleri önerilir.</string>
     
     <!-- Transcriber Screen -->
     <string name="transcriber_title">Çevrimdışı Transkripsiyon</string>
@@ -561,6 +563,7 @@
     <string name="lang_bulgarian">Bulgarca</string>
     <string name="lang_burmese">Birmanca</string>
     <string name="lang_catalan">Katalanca</string>
+    <string name="lang_central_kurdish">Merkezi Kürtçe (Sorani)</string>
     <string name="lang_chinese">Çince (Basitleştirilmiş)</string>
     <string name="lang_chinese_traditional">Çince (Geleneksel)</string>
     <string name="lang_croatian">Hırvatça</string>
@@ -807,9 +810,10 @@
     <!-- Premium / IAP -->
     <string name="premium_title">LLM Hub Ömür Boyu Premium</string>
     <string name="premium_subtitle">Tam deneyimin kilidini aç</string>
-    <string name="premium_feature_no_ads">Hiç reklam yok</string>
     <string name="premium_feature_vibe_coder">VibeCoder – Yapay Zeka Kod Üreteci</string>
     <string name="premium_feature_image_gen">Görsel Üreteci – Cihazda Yapay Zeka Sanatı</string>
+    <string name="premium_feature_creaitors">creAItors – Yapay Zeka yoldaşları oluşturun</string>
+    <string name="premium_feature_vibevoice">VibeVoice – eller serbest Yapay Zeka sesli sohbet</string>
     <string name="premium_feature_tts">Otomatik Metinden Sese Okuma</string>
     <string name="premium_feature_import_models">Harici Modelleri İçe Aktar</string>
     <string name="premium_feature_web_search">Web Araması – canlı internet sonuçları</string>
@@ -826,10 +830,7 @@
     <string name="premium_tap_to_unlock">Premium ile açmak için dokunun</string>
     <string name="premium_restore_success">Satın alma başarıyla geri yüklendi!</string>
     <string name="premium_restore_nothing">Önceki satın alma bulunamadı.</string>
-    <string name="premium_go_premium">Premium’a Geç</string>
-    <!-- Privacy &amp; Ads consent -->
-    <string name="privacy_ads_title">Gizlilik ve Reklamlar</string>
-    <string name="privacy_ads_subtitle">Reklam kişiselleştirme ve onay tercihlerini yönetin</string>    <string name="export">Dışa aktar</string>
+    <string name="premium_go_premium">Premium’a Geç</string>    <string name="export">Dışa aktar</string>
     <string name="home_section_tools">Araçlar</string>
     <string name="home_section_utilities">Yardımcılar</string>
     <string name="feature_vibevoice">Sesli sohbet</string>
@@ -880,7 +881,128 @@
     <string name="gemma_voice_option">Gemma</string>
         <string name="asr_model_backend"></string>
     <string name="llm_model_backend">LLM Model Arka Ucu</string>
+    <!-- Agent Feature -->
+    <string name="feature_agent">Ajan</string>
+    <string name="feature_agent_desc">Araçlı ve etkili AI asistanı</string>
+    <string name="premium_feature_agent">Ajan – Cihaz araçları ve eylemleri olan AI</string>
+    <string name="agent_title">Ajan</string>
+    <string name="agent_subtitle">Bana her şeyi sorabilirsiniz — arama, harita, takvim ve daha fazlasını yapabilirim</string>
+    <string name="agent_input_placeholder">Ajanınıza sorun…</string>
+    <string name="agent_voice_mode_system">Sistem</string>
+    <string name="agent_voice_mode_whisper">Whisper</string>
+    <string name="agent_voice_mode_gemma">Gemma</string>
+    <string name="agent_tool_running">Çalışıyor: %1$s</string>
+    <string name="agent_tool_success">Tamamlandı</string>
+    <string name="agent_tool_failed">Başarısız</string>
+    <string name="agent_tool_confirm_title">Eyleme izin verilsin mi?</string>
+    <string name="agent_tool_confirm_body">Ajan yapmak istiyor: %1$s</string>
+    <string name="agent_tool_approve">İzin ver</string>
+    <string name="agent_tool_deny">Reddet</string>
+    <string name="agent_no_model">Ajanı kullanmak için bir model indirin</string>
+    <string name="agent_map_expand">Tam haritayı görüntüle</string>
+    <string name="agent_settings_voice_mode">Ses giriş modu</string>
+    <string name="agent_settings_tools">Etkin araçlar</string>
+    <string name="agent_termux_toggle">Termux komutlarını etkinleştir (gelişmiş)</string>
+    <string name="agent_termux_confirm">Komutu çalıştır: %1$s</string>
+    <string name="agent_calendar_confirm">Etkinlik oluştur: %1$s</string>
+    <string name="agent_shortcut_confirm">Kısayolu çalıştır: %1$s</string>
+    <string name="agent_welcome_message">Merhaba! Ben sizin Yapay Zeka Ajanınızım. Web\'de arama yapabilir, haritaları gösterebilir, takvim etkinliklerini yönetebilir, hava durumunu kontrol edebilir, alarmlar kurabilir, mesaj gönderebilir ve hash hesaplayabilirim. Bugün size nasıl yardımcı olabilirim?</string>
+    <string name="agent_no_model_android">Ajanı kullanmak için önce bir GGUF veya LiteRT-LM modeli indirin</string>
+    <string name="agent_no_model_ios">Ajanı kullanmak için lütfen önce bir model indirin</string>
+    <string name="open_maps">Haritaları Aç</string>
+    <string name="agent_processing_tool">Temsilci aracı işliyor...</string>
+    <string name="agent_termux_guide_title">Termux Kurulum Kılavuzu</string>
+    <string name="agent_termux_guide_desc">Termux\'ta üçüncü taraf uygulama çalıştırma izinlerini etkinleştirin:</string>
+    <string name="agent_termux_cmd_copied">Komut panoya kopyalandı</string>
+    <string name="agent_termux_pending_approval">Onay Gerekli</string>
+    <string name="agent_termux_run_cmd">Komutu Çalıştır</string>
+    <string name="agent_termux_cancel_cmd">İptal</string>
+    <string name="agent_termux_cancelled">Kullanıcı tarafından iptal edildi</string>
+
+    <!-- Text to Speech Feature -->
+    <string name="feature_text_to_speech">Metinden Sese</string>
+    <string name="feature_text_to_speech_desc">Sistem veya Kokoro TTS seslerini kullanarak metni yüksek sesle okuyun</string>
+    <string name="tts_feature_title">Metinden Sese</string>
+    <string name="tts_feature_subtitle">Yapılandırılmış TTS motorunuzu kullanarak metni yüksek sesle okumak için kopyalayıp yapıştırın.</string>
+    <string name="tts_input_hint">Metni buraya girin veya yapıştırın...</string>
+    <string name="tts_speak_button">Sesli Oku</string>
+    <string name="tts_stop_button">Okumayı Durdur</string>
+    <string name="tts_paste_button">Metni Yapıştır</string>
+    <string name="tts_clear_button">Temizle</string>
+    <string name="tts_speaking_status">Sesli okunuyor…</string>
+    <string name="tts_idle_status">Okumaya hazır</string>
+    <string name="tts_empty_input_warning">Lütfen okunacak bir metin girin veya yapıştırın.</string>
+    <string name="tts_engine_system">Sistem Varsayılan TTS</string>
+    <string name="tts_engine_kokoro">Kokoro TTS</string>
+    <string name="tts_current_voice">Ses: %1$s</string>
+    <string name="tts_word_count">%1$d kelime</string>
+    <string name="search_huggingface">Hugging Face üzerinde ara</string>
+    <string name="search_huggingface_placeholder">GGUF veya LiteRT-LM modellerini ara</string>
+    <string name="huggingface_results">Hugging Face sonuçları</string>
+    <string name="download_vision_projector">Görüntü projektörünü indir</string>
+    <string name="huggingface_search_failed">Hugging Face araması başarısız</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="feature_music_generator">Müzik Oluşturucu</string>
+    <string name="feature_music_generator_desc">Cihaz üzerinde müzik ve ses efektleri oluşturun</string>
+    <string name="music_generation_models">Müzik Oluşturma Modelleri</string>
+    <string name="music_generation_models_description">Müzik parçaları ve ses efektleri oluşturmak için cihaz içi Yapay Zeka modelleri.</string>
+    <string name="music_prompt_label">Müzik Açıklaması</string>
+    <string name="prompt_hint_music">Oluşturmak istediğiniz müziği veya ses efektini tanımlayın...</string>
+    <string name="music_style_presets">Hazır Stiller</string>
+    <string name="music_tier_select">Oluşturucu Seviyesi</string>
+    <string name="music_duration_label">Süre</string>
+    <string name="generate_music">Müzik Oluştur</string>
+    <string name="generating_music">Müzik oluşturuluyor...</string>
+    <string name="music_prompt_empty_warning">Lütfen oluşturmak istediğiniz müzik için bir açıklama girin.</string>
+    <string name="music_generated_success">Müzik başarıyla oluşturuldu!</string>
+    <string name="music_saved_toast">Ses klibi yerel kitaplığa kaydedildi!</string>
+    <string name="music_generator_download_model">Önce Model İndirin</string>
+    <string name="music_generator_download_model_desc">Müzik oluşturmaya başlamak için Modeller ekranından bir müzik oluşturma modeli indirin.</string>
+
+    <!-- MCP Agent -->
+    <string name="agent_mcp_settings">MCP ayarları</string>
+    <string name="agent_mcp_title">MCP Araçları</string>
+    <string name="agent_mcp_description">MCP sunucularına bağlanın ve Aracının araçlarını kullanmasına izin verin.</string>
+    <string name="agent_mcp_transport">Aktarım</string>
+    <string name="agent_mcp_termux_stdio">Termux stdio</string>
+    <string name="agent_mcp_remote_http">Uzak HTTP</string>
+    <string name="agent_mcp_command">MCP sunucu komutu</string>
+    <string name="agent_mcp_termux_help">MCP sunucusunu Termux stdio üzerinden çalıştırır. Önce gerekli paketleri kurun.</string>
+    <string name="agent_mcp_server_url">Sunucu URL’si</string>
+    <string name="agent_mcp_bearer_token">Bearer belirteci (isteğe bağlı)</string>
+    <string name="agent_mcp_approval_notice">Her MCP araç çağrısı çalışmadan önce onayınızı gerektirir.</string>
+    <string name="agent_mcp_connecting">Bağlanıyor…</string>
+    <string name="agent_mcp_connected_tools">%1$d araç bağlandı</string>
+    <string name="agent_mcp_error">MCP hatası: %1$s</string>
+    <string name="agent_mcp_connect">Bağlan</string>
+    <string name="agent_mcp_disconnect">Bağlantıyı kes</string>
+    <string name="agent_mcp_tool_request">MCP aracı: %1$s</string>
+    <string name="agent_mcp_allow">İzin ver</string>
+    <string name="agent_mcp_deny">Reddet</string>
+    <string name="agent_mcp_approval_required">Onay gerekli</string>
+    <string name="agent_mcp_denied">Kullanıcı tarafından reddedildi</string>
+    <string name="agent_mcp_status">Durum</string>
+    <string name="agent_termux_tool_title">Termux kabuk komutu</string>
+    <string name="agent_mcp_termux_permission_required">Android Ayarları > Uygulamalar > LLM Hub > İzinler > Ek izinler bölümünde LLM Hub için “Termux ortamında komut çalıştırma” iznini verin.</string>
+    <string name="agent_mcp_termux_not_installed">Termux 0.109 veya daha yenisi gereklidir.</string>
+    <string name="agent_mcp_termux_timed_out">Termux zaman aşımından önce sonuç döndürmedi.</string>
+    <string name="agent_mcp_termux_run_command_unavailable">Google Play Termux sürümü harici komutları desteklemiyor. stdio için F-Droid/GitHub Termux sürümünü kullanın veya Uzak HTTP’yi seçin.</string>
+    <string name="gguf_engine">GGUF motoru</string>
+    <string name="gguf_engine_geniex_default">GenieX (varsayılan)</string>
+    <string name="gguf_engine_llama_cpp">llama.cpp</string>
+    <string name="gguf_engine_crash_title">GGUF motoru durdu</string>
+    <string name="gguf_engine_crash_message">GenieX bir GGUF modeli yüklerken durdu. Ayarlar bölümünden GGUF motorunu değiştirmeyi deneyin.</string>
+    <string name="gguf_engine_open_settings">Ayarları Aç</string>
+    <!-- Hugging Face Token -->
+    <string name="hf_token_title">Hugging Face Belirteci</string>
+    <string name="hf_token_subtitle">Model indirmeleri için kişisel erişim belirteci</string>
+    <string name="hf_token_dialog_title">Hugging Face Erişim Belirteci</string>
+    <string name="hf_token_explanation">Varsayılan belirteç başarısız olursa, hız sınırına ulaşırsa veya lisans onaylı korumalı modelleri indirirken huggingface.co/settings/tokens adresinden alacağınız kişisel okuma belirtecinizi girin.</string>
+    <string name="hf_token_placeholder">Kişisel belirteç girin (hf_...)</string>
+    <string name="hf_token_using_default">Varsayılan belirteç kullanılıyor</string>
+    <string name="hf_token_custom_active">Özel belirteç etkin</string>
+    <string name="hf_token_clear">Varsayılana sıfırla</string>
+    <string name="gguf_vulkan_setting">GGUF GPU altyapısı</string>
+    <string name="crash_recovery_title">Uygulama beklenmedik şekilde kapandı</string>
+    <string name="crash_recovery_message">Daha küçük bir model yüklemeyi veya CPU kullanmayı deneyin.</string>
 </resources>
-
-
-

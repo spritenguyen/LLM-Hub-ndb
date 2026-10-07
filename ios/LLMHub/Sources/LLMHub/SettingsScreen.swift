@@ -1,13 +1,11 @@
 import SwiftUI
 import UIKit
-import RunAnywhere
 
 // MARK: - Settings Screen (mirroring Android SettingsScreen.kt)
 struct SettingsScreen: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.openURL) var openURL
     @StateObject private var purchases = PurchaseManager.shared
-    @ObservedObject private var consent = ConsentManager.shared
 
     var onNavigateBack: () -> Void
     var onNavigateToModels: () -> Void
@@ -22,7 +20,8 @@ struct SettingsScreen: View {
     @StateObject private var ragManager = RagServiceManager.shared
     @State private var showAbout = false
     @State private var showTerms = false
-
+    @State private var showTTSAlert = false
+    @State private var showHfTokenDialog = false
 
     var body: some View {
         ZStack {
@@ -38,6 +37,19 @@ struct SettingsScreen: View {
                         subtitleKey: "browse_download_models"
                     ) {
                         onNavigateToModels()
+                    }
+                    .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
+                    .listRowBackground(Color.clear)
+
+                    SettingsRow(
+                        icon: "key.fill",
+                        iconColor: ApolloPalette.accentStrong,
+                        titleKey: "hf_token_title",
+                        subtitleString: settings.hasCustomHfToken
+                            ? settings.localized("hf_token_custom_active")
+                            : settings.localized("hf_token_using_default")
+                    ) {
+                        showHfTokenDialog = true
                     }
                     .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
                     .listRowBackground(Color.clear)
@@ -81,7 +93,6 @@ struct SettingsScreen: View {
                             subtitleKey: "manage_memory_subtitle"
                         ) {
                             Task {
-                                _ = await RunAnywhere.discoverDownloadedModels()
                                 await RagServiceManager.shared.initialize(modelId: settings.selectedEmbeddingModelId)
                                 await MainActor.run {
                                     showMemoryDialog = true
@@ -104,6 +115,17 @@ struct SettingsScreen: View {
                         subtitle: settings.localized("auto_readout_description"),
                         isOn: $settings.autoReadoutEnabled
                     )
+                    .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
+                    .listRowBackground(Color.clear)
+
+                    SettingsRow(
+                        icon: "waveform",
+                        iconColor: ApolloPalette.accentStrong,
+                        titleKey: "text_to_speech_voices",
+                        subtitleKey: "text_to_speech_voices_description"
+                    ) {
+                        openTextToSpeechVoiceSettings()
+                    }
                     .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
                     .listRowBackground(Color.clear)
 
@@ -138,19 +160,6 @@ struct SettingsScreen: View {
                         titleKey: "terms_of_service",
                         subtitleKey: "legal_terms_conditions"
                     ) { showTerms = true }
-                    .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
-                    .listRowBackground(Color.clear)
-
-                    // Privacy & Ads — only shown when GDPR consent is required (EU users)
-                    // When consent is not required this row is hidden; always safe to show it though.
-                    SettingsRow(
-                        icon: "hand.raised.fill",
-                        iconColor: Color(hex: "4CAF50"),
-                        titleKey: "privacy_ads_title",
-                        subtitleKey: "privacy_ads_subtitle"
-                    ) {
-                        consent.showPrivacyOptionsForm()
-                    }
                     .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
                     .listRowBackground(Color.clear)
                 } header: {
@@ -193,13 +202,11 @@ struct SettingsScreen: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            BannerAdContainer()
+            .apolloTopScrollEdgeFade()
         }
         .navigationTitle(settings.localized("feature_settings_title"))
         .navigationBarTitleDisplayMode(.large)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -213,21 +220,27 @@ struct SettingsScreen: View {
             }
         }
         // Language Dialog
-        .sheet(isPresented: $showLanguageDialog) {
-            LanguagePickerSheet()
-                .environmentObject(settings)
+        .apolloSheet(isPresented: $showLanguageDialog) {
+            NavigationStack {
+                LanguagePickerSheet()
+                    .environmentObject(settings)
+            }
         }
         // Memory Manager Sheet
-        .sheet(isPresented: $showMemoryDialog) {
+        .apolloSheet(isPresented: $showMemoryDialog) {
             MemoryManagerSheet(onDismiss: { showMemoryDialog = false })
                 .environmentObject(settings)
         }
-        .sheet(isPresented: $showAbout) {
+        .apolloSheet(isPresented: $showAbout) {
             AboutScreen()
                 .environmentObject(settings)
         }
-        .sheet(isPresented: $showTerms) {
+        .apolloSheet(isPresented: $showTerms) {
             TermsOfServiceScreen()
+                .environmentObject(settings)
+        }
+        .apolloSheet(isPresented: $showHfTokenDialog) {
+            HuggingFaceTokenSheet(onDismiss: { showHfTokenDialog = false })
                 .environmentObject(settings)
         }
         .onChange(of: settings.selectedEmbeddingModelId) { _, newId in
@@ -239,6 +252,19 @@ struct SettingsScreen: View {
                 }
             }
         }
+        // TTS Voice Settings guidance alert
+        .alert(settings.localized("text_to_speech_voices"), isPresented: $showTTSAlert) {
+            Button(settings.localized("ok"), role: .cancel) {}
+        } message: {
+            Text(settings.localized("tts_voices_nav_hint"))
+        }
+    }
+
+    private func openTextToSpeechVoiceSettings() {
+        // prefs:root=ACCESSIBILITY is blocked by the iOS sandbox for App Store apps.
+        // The only reliable deep-link is UIApplication.openSettingsURLString (app's own settings).
+        // We guide the user with an alert instead.
+        showTTSAlert = true
     }
 }
 
@@ -475,10 +501,11 @@ struct MemoryManagerSheet: View {
                     }
                     .padding(.vertical)
                 }
+                .apolloTopScrollEdgeFade()
             }
             .navigationTitle(settings.localized("manage_memory"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(settings.localized("done")) { onDismiss() }
@@ -521,7 +548,7 @@ struct MemoryManagerSheet: View {
                     }
                 }
             }
-            .sheet(isPresented: $showChatImport) {
+            .apolloSheet(isPresented: $showChatImport) {
                 ChatImportSheet(
                     onDismiss: { showChatImport = false },
                     onImport: { _, success in
@@ -532,7 +559,7 @@ struct MemoryManagerSheet: View {
                 )
                 .environmentObject(settings)
             }
-            .sheet(item: $editingDocument) { doc in
+            .apolloSheet(item: $editingDocument) { doc in
                 EditMemorySheet(document: doc, onDismiss: { editingDocument = nil })
                     .environmentObject(settings)
             }
@@ -629,7 +656,7 @@ private struct EditMemorySheet: View {
             }
             .navigationTitle(settings.localized("edit_memory"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(settings.localized("cancel")) { onDismiss() }
@@ -703,11 +730,12 @@ private struct ChatImportSheet: View {
                     }
                     .listStyle(.insetGrouped)
                     .scrollContentBackground(.hidden)
+                    .apolloTopScrollEdgeFade()
                 }
             }
             .navigationTitle(settings.localized("select_chats_to_import"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(settings.localized("cancel")) { onDismiss() }
@@ -784,10 +812,11 @@ struct LanguagePickerSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
+            .apolloTopScrollEdgeFade()
         }
         .navigationTitle(settings.localized("select_language"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(settings.localized("done")) { dismiss() }
@@ -1011,10 +1040,11 @@ struct AboutScreen: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .apolloTopScrollEdgeFade()
             }
             .navigationTitle(settings.localized("about_llm_hub"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(settings.localized("done")) { dismiss() }
@@ -1080,10 +1110,11 @@ struct TermsOfServiceScreen: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .apolloTopScrollEdgeFade()
             }
             .navigationTitle(settings.localized("terms_of_service"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(settings.localized("done")) { dismiss() }
@@ -1091,5 +1122,130 @@ struct TermsOfServiceScreen: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Hugging Face Token Sheet
+
+private struct HuggingFaceTokenSheet: View {
+    @EnvironmentObject var settings: AppSettings
+    let onDismiss: () -> Void
+    @State private var tokenText: String = ""
+    @State private var isSecured: Bool = true
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ApolloLiquidBackground()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(settings.localized("hf_token_dialog_title"))
+                                .font(.headline)
+                                .foregroundColor(.white)
+
+                            Text(settings.localized("hf_token_explanation"))
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                if isSecured {
+                                    SecureField(settings.localized("hf_token_placeholder"), text: $tokenText)
+                                } else {
+                                    TextField(settings.localized("hf_token_placeholder"), text: $tokenText)
+                                }
+                                Button {
+                                    isSecured.toggle()
+                                } label: {
+                                    Image(systemName: isSecured ? "eye.slash" : "eye")
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
+                            }
+                            .textFieldStyle(.plain)
+                            .padding(12)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .foregroundColor(.white)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+
+                            if settings.hasCustomHfToken {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(ApolloPalette.accentStrong)
+                                        .font(.caption)
+                                    Text(settings.localized("hf_token_custom_active"))
+                                        .font(.caption)
+                                        .foregroundColor(ApolloPalette.accentStrong)
+                                }
+                            } else {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "info.circle")
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .font(.caption)
+                                    Text(settings.localized("hf_token_using_default"))
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
+                            }
+                        }
+
+                        HStack(spacing: 12) {
+                            if settings.hasCustomHfToken {
+                                Button(role: .destructive) {
+                                    settings.customHfToken = ""
+                                    tokenText = ""
+                                    onDismiss()
+                                } label: {
+                                    Text(settings.localized("hf_token_clear"))
+                                        .font(.subheadline.bold())
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Color.red.opacity(0.2))
+                                        .foregroundColor(.red)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                            }
+
+                            Button {
+                                settings.customHfToken = tokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                onDismiss()
+                            } label: {
+                                Text(settings.localized("save"))
+                                    .font(.subheadline.bold())
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(ApolloPalette.accentStrong)
+                                    .foregroundColor(.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+
+                        Spacer()
+                    }
+                    .padding(20)
+                }
+                .apolloTopScrollEdgeFade()
+            }
+            .navigationTitle(settings.localized("hf_token_title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .apolloNavigationBackground()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(settings.localized("close")) {
+                        onDismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+            .onAppear {
+                tokenText = settings.customHfToken
+            }
+        }
+        .presentationDetents([.medium])
     }
 }

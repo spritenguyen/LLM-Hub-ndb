@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmhub.llmhub.data.LLMModel
+import com.llmhub.llmhub.data.effectiveContextWindow
 import com.llmhub.llmhub.data.ModelAvailabilityProvider
 import com.llmhub.llmhub.data.ModelConfig
 import com.llmhub.llmhub.data.ModelPreferences
@@ -20,7 +21,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.llmhub.llmhub.data.DeviceInfo
 
 class WritingAidViewModel(application: Application) : AndroidViewModel(application) {
     
@@ -128,9 +128,9 @@ class WritingAidViewModel(application: Application) : AndroidViewModel(applicati
                 } ?: available.firstOrNull()
                 modelToSelect?.let {
                     _selectedModel.value = it
-                    if (it.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-                        _selectedBackend.value = LlmInference.Backend.GPU
-                        _selectedNpuDeviceId.value = "dev0"
+                    if (it.modelFormat == "gguf" && !prefs.contains("selected_backend")) {
+                        _selectedBackend.value = LlmInference.Backend.CPU
+                        _selectedNpuDeviceId.value = null
                     } else {
                         _selectedBackend.value = if (it.supportsGpu) {
                             _selectedBackend.value ?: LlmInference.Backend.GPU
@@ -160,9 +160,9 @@ class WritingAidViewModel(application: Application) : AndroidViewModel(applicati
         if (isGemma4_12B) {
             _selectedBackend.value = LlmInference.Backend.GPU
             _selectedNpuDeviceId.value = null
-        } else if (model.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-            _selectedBackend.value = LlmInference.Backend.GPU
-            _selectedNpuDeviceId.value = "dev0"
+        } else if (model.modelFormat == "gguf") {
+            _selectedBackend.value = LlmInference.Backend.CPU
+            _selectedNpuDeviceId.value = null
         } else {
             _selectedBackend.value = if (model.supportsGpu) {
                 _selectedBackend.value ?: LlmInference.Backend.GPU
@@ -198,7 +198,7 @@ class WritingAidViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun setMaxTokens(maxTokens: Int) {
-        val cap = _selectedModel.value?.contextWindowSize?.coerceAtLeast(1) ?: 4096
+        val cap = _selectedModel.value?.effectiveContextWindow(getApplication<Application>()) ?: 4096
         _selectedMaxTokens.value = maxTokens.coerceIn(1, cap)
         saveSettings()
         applyGenerationParametersToService()
@@ -212,14 +212,14 @@ class WritingAidViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun applyGenerationParametersToService() {
         val model = _selectedModel.value ?: return
-        val effectiveCtx = _selectedMaxTokens.value.coerceIn(1, model.contextWindowSize.coerceAtLeast(1))
+        val effectiveCtx = _selectedMaxTokens.value.coerceIn(1, model.effectiveContextWindow(getApplication<Application>()))
         inferenceService.setGenerationParameters(
             maxTokens = effectiveCtx,
             topK = null,
             topP = null,
             temperature = null,
             nGpuLayers = _selectedNGpuLayers.value,
-            enableThinking = if (model.name.contains("Gemma-4", ignoreCase = true)) false else _enableThinking.value,
+            enableThinking = if (model.name.contains("Gemma-4", ignoreCase = true) || model.name.contains("Muse Glimmer", ignoreCase = true) || model.name.contains("muse-glimmer", ignoreCase = true) || model.name.contains("granite-4.2", ignoreCase = true) || model.name.contains("granite 4.2", ignoreCase = true)) false else _enableThinking.value,
             contextWindow = effectiveCtx
         )
     }

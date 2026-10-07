@@ -10,21 +10,26 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     case systemDefault = "system"
     case english = "en"
     case arabic = "ar"
+    case danish = "da"
     case german = "de"
     case spanish = "es"
     case persian = "fa"
     case french = "fr"
     case hebrew = "he"
+    case hindi = "hi"
     case indonesian = "id"
     case italian = "it"
     case japanese = "ja"
     case korean = "ko"
+    case dutch = "nl"
     case polish = "pl"
     case portuguese = "pt"
     case russian = "ru"
+    case thai = "th"
     case turkish = "tr"
     case ukrainian = "uk"
-    case chinese = "zh"
+    case vietnamese = "vi"
+    case chineseTraditional = "zh-TW"
 
     var id: String { rawValue }
 
@@ -33,21 +38,26 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
         case .systemDefault: return "system_default_language"
         case .english: return "language_english"
         case .arabic: return "language_arabic"
+        case .danish: return "language_danish"
         case .german: return "language_german"
         case .spanish: return "language_spanish"
         case .persian: return "language_persian"
         case .french: return "language_french"
         case .hebrew: return "language_hebrew"
+        case .hindi: return "language_hindi"
         case .indonesian: return "language_indonesian"
         case .italian: return "language_italian"
         case .japanese: return "language_japanese"
         case .korean: return "language_korean"
+        case .dutch: return "language_dutch"
         case .polish: return "language_polish"
         case .portuguese: return "language_portuguese"
         case .russian: return "language_russian"
+        case .thai: return "language_thai"
         case .turkish: return "language_turkish"
         case .ukrainian: return "language_ukrainian"
-        case .chinese: return "language_chinese"
+        case .vietnamese: return "language_vietnamese"
+        case .chineseTraditional: return "language_chinese"
         }
     }
 
@@ -118,6 +128,22 @@ final class AppSettings: ObservableObject {
     @Published var memoryEnabled: Bool {
         didSet { UserDefaults.standard.set(memoryEnabled, forKey: "memory_enabled") }
     }
+    @Published var customHfToken: String {
+        didSet { UserDefaults.standard.set(customHfToken, forKey: "custom_hf_token") }
+    }
+
+    /// Effective Hugging Face token: user's custom token if provided, else the default bundle token.
+    /// Default token is NEVER exposed to the user in settings UI.
+    var effectiveHfToken: String? {
+        let trimmed = customHfToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        let defaultToken = (Bundle.main.object(forInfoDictionaryKey: "HF_TOKEN") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return defaultToken?.isEmpty == false ? defaultToken : nil
+    }
+
+    var hasCustomHfToken: Bool {
+        !customHfToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     private init() {
         let langRaw = UserDefaults.standard.string(forKey: "app_language") ?? "system"
@@ -129,6 +155,7 @@ final class AppSettings: ObservableObject {
         autoReadoutEnabled = UserDefaults.standard.bool(forKey: "auto_readout_enabled")
         selectedEmbeddingModelId = UserDefaults.standard.string(forKey: "selected_embedding_model_id")
         memoryEnabled = UserDefaults.standard.bool(forKey: "memory_enabled")
+        customHfToken = UserDefaults.standard.string(forKey: "custom_hf_token") ?? ""
     }
 
     private var activeLocalizationCode: String {
@@ -351,6 +378,8 @@ final class OnDeviceTtsManager: NSObject, ObservableObject, AVSpeechSynthesizerD
             return ["en-US", "en-GB", "en"]
         case .arabic:
             return ["ar-SA", "ar-AE", "ar"]
+        case .danish:
+            return ["da-DK", "da"]
         case .german:
             return ["de-DE", "de"]
         case .spanish:
@@ -361,6 +390,8 @@ final class OnDeviceTtsManager: NSObject, ObservableObject, AVSpeechSynthesizerD
             return ["fr-FR", "fr-CA", "fr"]
         case .hebrew:
             return ["he-IL", "he"]
+        case .hindi:
+            return ["hi-IN", "hi"]
         case .indonesian:
             return ["id-ID", "id"]
         case .italian:
@@ -369,18 +400,24 @@ final class OnDeviceTtsManager: NSObject, ObservableObject, AVSpeechSynthesizerD
             return ["ja-JP", "ja"]
         case .korean:
             return ["ko-KR", "ko"]
+        case .dutch:
+            return ["nl-NL", "nl-BE", "nl"]
         case .polish:
             return ["pl-PL", "pl"]
         case .portuguese:
             return ["pt-BR", "pt-PT", "pt"]
         case .russian:
             return ["ru-RU", "ru"]
+        case .thai:
+            return ["th-TH", "th"]
         case .turkish:
             return ["tr-TR", "tr"]
         case .ukrainian:
             return ["uk-UA", "uk"]
-        case .chinese:
-            return ["zh-CN", "zh-TW", "zh-HK", "zh"]
+        case .vietnamese:
+            return ["vi-VN", "vi"]
+        case .chineseTraditional:
+            return ["zh-TW", "zh-HK", "zh-Hant", "zh-Hant-TW"]
         }
     }
 
@@ -423,10 +460,10 @@ final class OnDeviceTtsManager: NSObject, ObservableObject, AVSpeechSynthesizerD
             return ["tr-TR", "tr"]
         case .ukrainian:
             return ["uk-UA", "uk"]
-        case .simplifiedChinese:
-            return ["zh-CN", "zh"]
         case .traditionalChinese:
-            return ["zh-TW", "zh-HK", "zh"]
+            return ["zh-TW", "zh-HK", "zh-Hant"]
+        case .simplifiedChinese:
+            return []
         default:
             let raw = dominantLanguage.rawValue
             return raw.isEmpty ? [] : [raw]

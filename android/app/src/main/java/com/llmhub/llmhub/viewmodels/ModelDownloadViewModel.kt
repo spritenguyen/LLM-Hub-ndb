@@ -20,12 +20,26 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.llmhub.llmhub.data.localFileName
 import android.content.Context
 import com.llmhub.llmhub.BuildConfig
 import com.llmhub.llmhub.data.isModelFileValid
+import com.llmhub.llmhub.data.hasCompleteDownloadedBundle
 import com.google.gson.Gson
 import android.net.Uri
+import com.google.gson.JsonParser
+import java.net.HttpURLConnection
+import java.net.URL
+
+data class HuggingFaceModelFile(
+    val repo: String,
+    val path: String,
+    val sizeBytes: Long
+) {
+    val isProjector: Boolean get() = path.contains("mmproj", true) || path.contains("projector", true)
+    val downloadUrl: String get() = "https://huggingface.co/$repo/resolve/main/${path.replace(" ", "%20")}" // Direct HF resolve endpoint.
+}
 
 class ModelDownloadViewModel(application: Application) : AndroidViewModel(application) {
     private val _models = MutableStateFlow<List<LLMModel>>(emptyList())
@@ -45,15 +59,56 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
 
     private val downloadJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
 
+    companion object {
+        private const val PREFS_NAME = "model_prefs"
+        private const val KEY_CUSTOM_HF_TOKEN = "custom_hf_token"
+
+        /**
+         * Returns ONLY the user-provided custom token (never the default secret token).
+         * If the user has not configured their own token, returns empty string.
+         */
+        fun getCustomToken(context: Context): String {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val custom = prefs.getString(KEY_CUSTOM_HF_TOKEN, null)?.trim()
+            if (!custom.isNullOrEmpty() && custom != BuildConfig.HF_TOKEN) {
+                return custom
+            }
+            return ""
+        }
+
+        /**
+         * Returns the effective token: custom user token if configured, else BuildConfig.HF_TOKEN fallback.
+         */
+        fun getEffectiveToken(context: Context): String? {
+            val custom = getCustomToken(context)
+            if (custom.isNotEmpty()) return custom
+            return BuildConfig.HF_TOKEN.takeIf { it.isNotEmpty() }
+        }
+
+        /**
+         * Saves or clears the user-provided custom token.
+         */
+        fun setCustomToken(context: Context, token: String?) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val clean = token?.trim()?.takeIf { it.isNotEmpty() && it != BuildConfig.HF_TOKEN }
+            if (clean == null) {
+                prefs.edit().remove(KEY_CUSTOM_HF_TOKEN).remove("hf_token").apply()
+            } else {
+                prefs.edit().putString(KEY_CUSTOM_HF_TOKEN, clean).apply()
+            }
+        }
+    }
+
     init {
-        // Load HF token from preferences, with your provided token as default
-        val prefs = context.getSharedPreferences("model_prefs", Context.MODE_PRIVATE)
-        val savedToken = prefs.getString("hf_token", BuildConfig.HF_TOKEN)
-        android.util.Log.d("ModelDownloadViewModel", "[init] Loaded HF token: ${savedToken?.take(8)}... from prefs, BuildConfig.HF_TOKEN: ${BuildConfig.HF_TOKEN?.take(8)}...")
-        _hfToken.value = savedToken
+        // Load custom HF token if user provided one, otherwise use BuildConfig.HF_TOKEN fallback.
+        // Default token is NEVER stored into custom token preferences or exposed to the user.
+        val effectiveToken = getEffectiveToken(context)
+        val hasCustom = getCustomToken(context).isNotEmpty()
+        android.util.Log.d("ModelDownloadViewModel", "[init] Loaded effective HF token: ${effectiveToken?.take(8)}... (hasCustom=$hasCustom)")
+        _hfToken.value = effectiveToken
         
         // Initialize ModelDownloader with token
-        modelDownloader = ModelDownloader(ktorClient, context, savedToken)
+        modelDownloader = ModelDownloader(ktorClient, context, effectiveToken)
         
         loadModels()
         loadImportedModels()
@@ -65,14 +120,73 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun setHuggingFaceToken(token: String?) {
-        // Save token to preferences
-        val prefs = context.getSharedPreferences("model_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("hf_token", token).apply()
-        android.util.Log.d("ModelDownloadViewModel", "[setHuggingFaceToken] Token set: ${token?.take(8)}...")
-        _hfToken.value = token
+        setCustomToken(context, token)
+        val effectiveToken = getEffectiveToken(context)
+        android.util.Log.d("ModelDownloadViewModel", "[setHuggingFaceToken] Custom token updated, effective: ${effectiveToken?.take(8)}...")
+        _hfToken.value = effectiveToken
         
         // Recreate ModelDownloader with new token
-        modelDownloader = ModelDownloader(ktorClient, context, token)
+        modelDownloader = ModelDownloader(ktorClient, context, effectiveToken)
+    }
+
+    /** Searches Hugging Face repositories and exposes only files the app can import directly. */
+    suspend fun searchHuggingFaceFiles(query: String, format: String, page: Int = 0): List<HuggingFaceModelFile> = withContext(Dispatchers.IO) {
+        fun request(url: String, useToken: Boolean = false): String {
+            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 20_000
+                setRequestProperty("Accept", "application/json")
+                if (useToken) {
+                    _hfToken.value?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+                }
+            }
+            val code = connection.responseCode
+            if ((code == 401 || code == 403) && !useToken && !_hfToken.value.isNullOrBlank()) {
+                connection.disconnect()
+                return request(url, useToken = true)
+            }
+            return connection.inputStream.bufferedReader().use { it.readText() }.also { connection.disconnect() }
+        }
+        val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+        val libraryFilter = if (format == "litertlm") "litert-lm" else format
+        val repos = JsonParser.parseString(request("https://huggingface.co/api/models?search=$encoded&filter=$libraryFilter&limit=20"))
+            .asJsonArray.mapNotNull { it.asJsonObject.get("id")?.asString }
+        repos.flatMap { repo ->
+            runCatching {
+                val encodedRepo = repo.split("/").joinToString("/") { java.net.URLEncoder.encode(it, "UTF-8") }
+                JsonParser.parseString(request("https://huggingface.co/api/models/$encodedRepo/tree/main?recursive=true&expand=true"))
+                    .asJsonArray.mapNotNull { entry ->
+                        val item = entry.asJsonObject
+                        val path = item.get("path")?.asString ?: return@mapNotNull null
+                        if (item.get("type")?.asString != "file" || !path.endsWith(".$format", true)) return@mapNotNull null
+                        HuggingFaceModelFile(repo, path, item.get("size")?.asLong ?: 0L)
+                    }
+            }.getOrDefault(emptyList())
+        }.sortedBy { it.sizeBytes }
+    }
+
+    fun downloadHuggingFaceImport(
+        name: String,
+        format: String,
+        main: HuggingFaceModelFile,
+        projector: HuggingFaceModelFile? = null,
+        supportsVision: Boolean = false,
+        contextWindowSize: Int = 4096,
+        supportsMtp: Boolean = true
+    ) {
+        val additionalFiles = if (supportsVision && projector != null) listOf(projector.downloadUrl) else emptyList()
+        val model = LLMModel(
+            name = name, description = "Hugging Face $format model", url = main.downloadUrl,
+            category = if (supportsVision) "multimodal" else "text", sizeBytes = main.sizeBytes + (if (supportsVision && projector != null) projector.sizeBytes else 0), source = "Custom",
+            supportsVision = supportsVision, supportsAudio = false, supportsGpu = true,
+            supportsMtp = supportsMtp,
+            requirements = com.llmhub.llmhub.data.ModelRequirements(4, 8), contextWindowSize = contextWindowSize,
+            modelFormat = format.lowercase(), additionalFiles = additionalFiles,
+            isDownloaded = false, isDownloading = false, downloadProgress = 0f
+        )
+        if (addExternalModel(model)) {
+            downloadModel(model)
+        }
     }
 
     private fun loadModels() {
@@ -80,7 +194,7 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
         if (!modelsDir.exists()) modelsDir.mkdirs()
 
         // Prepare list with real downloaded/partial state
-        val baseModels = ModelData.models.map { model ->
+        val baseModels: MutableList<LLMModel> = ModelData.models.map { model ->
             // Handle Stable Diffusion NPU models (QNN format)
             if (model.modelFormat == "qnn_npu") {
                 val sdModelsDir = File(context.filesDir, "sd_models")
@@ -249,16 +363,16 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
                 } else {
                     model.copy(isDownloaded = false, isDownloading = false, downloadProgress = 0f, downloadedBytes = 0, totalBytes = model.sizeBytes)
                 }
-            } else if (model.modelFormat == "gguf" && model.additionalFiles.isNotEmpty()) {
-                // GGUF models with additional files (e.g., mmproj vision projector)
+            } else if ((model.modelFormat == "gguf" || model.modelFormat == "tflite") && model.additionalFiles.isNotEmpty()) {
+                // GGUF or TFLite models with additional files
                 val modelDirName = model.name.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_.-]"), "")
                 val modelDir = File(modelsDir, modelDirName)
                 if (!modelDir.exists()) modelDir.mkdirs()
                 val primaryFile = File(modelDir, model.localFileName())
 
                 // Calculate total size of all files found on disk (within model dir)
-                var totalFoundBytes = if (primaryFile.exists()) primaryFile.length() else 0L
-                var allFilesFound = primaryFile.exists()
+                var totalFoundBytes = if (primaryFile.isFile) primaryFile.length() else 0L
+                var allFilesFound = primaryFile.isFile && primaryFile.length() > 0L
 
                 // Check additional files
                 val baseUrl = model.url.substringBefore("?").substringBeforeLast("/") + "/"
@@ -266,7 +380,7 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
                     val fileUrl = if (fileUrlOrPath.startsWith("http")) fileUrlOrPath else baseUrl + fileUrlOrPath
                     val fileName = fileUrl.substringAfterLast("/").substringBefore("?")
                     val file = File(modelDir, fileName)
-                    if (file.exists()) {
+                    if (file.isFile && file.length() > 0L) {
                         totalFoundBytes += file.length()
                         android.util.Log.d("ModelDownloadViewModel", "Found additional file in model dir: ${fileName} (${file.length()} bytes)")
                     } else {
@@ -394,22 +508,33 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
         baseModels.filter { it.sizeBytes == 0L }.forEach { unknownModel ->
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val url = java.net.URL(unknownModel.url)
-                    val conn = url.openConnection() as java.net.HttpURLConnection
-                    conn.requestMethod = "HEAD"
-                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-                    
-                    // Add HF token if available for HEAD requests
-                    _hfToken.value?.let { token ->
-                        if (token.isNotBlank()) {
-                            conn.setRequestProperty("Authorization", "Bearer $token")
+                    fun fetchHead(useToken: Boolean): Long {
+                        val url = java.net.URL(unknownModel.url)
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "HEAD"
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                        
+                        // Add HF token if available for HEAD requests
+                        if (useToken) {
+                            _hfToken.value?.let { token ->
+                                if (token.isNotBlank()) {
+                                    conn.setRequestProperty("Authorization", "Bearer $token")
+                                }
+                            }
                         }
+                        
+                        conn.connectTimeout = 10_000
+                        conn.readTimeout = 10_000
+                        val code = conn.responseCode
+                        if ((code == 401 || code == 403) && !useToken && !_hfToken.value.isNullOrBlank()) {
+                            conn.disconnect()
+                            return fetchHead(useToken = true)
+                        }
+                        val size = conn.contentLengthLong
+                        conn.disconnect()
+                        return size
                     }
-                    
-                    conn.connectTimeout = 10_000
-                    conn.readTimeout = 10_000
-                    val size = conn.contentLengthLong
-                    conn.disconnect()
+                    val size = fetchHead(useToken = false)
                     if (size > 0) {
                         updateModel(unknownModel.name) { existing ->
                             // If there is already a partial file, recompute progress
@@ -487,7 +612,10 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
             ) 
         }
 
-        android.util.Log.d("ModelDownloadViewModel", "[downloadModel] Using HF token: ${_hfToken.value?.take(8)}... for model: ${model.name}")
+        val activeToken = getEffectiveToken(context)
+        _hfToken.value = activeToken
+        modelDownloader = ModelDownloader(ktorClient, context, activeToken)
+        android.util.Log.d("ModelDownloadViewModel", "[downloadModel] Using active HF token: ${activeToken?.take(8)}... for model: ${model.name}")
 
         val job = viewModelScope.launch {
             var latestStatus: com.llmhub.llmhub.data.DownloadStatus? = null
@@ -661,21 +789,21 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
                         return@onCompletion
                     }
                     
-                    // GGUF models with additional files (like mmproj)
-                    if (model.modelFormat == "gguf" && model.additionalFiles.isNotEmpty()) {
+                    // GGUF or TFLite models with additional files
+                    if ((model.modelFormat == "gguf" || model.modelFormat == "tflite") && model.additionalFiles.isNotEmpty()) {
                         val modelsDir = File(context.filesDir, "models")
                         val modelDirName = model.name.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_.-]"), "")
                         val modelDir = File(modelsDir, modelDirName)
                         val primaryFile = File(modelDir, model.localFileName())
 
-                        var totalDownloadedOnDisk = if (primaryFile.exists()) primaryFile.length() else 0L
+                        var totalDownloadedOnDisk = if (primaryFile.isFile) primaryFile.length() else 0L
                         val baseUrl = model.url.substringBefore("?").substringBeforeLast("/") + "/"
 
                         for (fileUrlOrPath in model.additionalFiles) {
                             val fileUrl = if (fileUrlOrPath.startsWith("http")) fileUrlOrPath else baseUrl + fileUrlOrPath
                             val fileName = fileUrl.substringAfterLast("/").substringBefore("?")
                             val file = File(modelDir, fileName)
-                            if (file.exists()) {
+                            if (file.isFile && file.length() > 0L) {
                                 totalDownloadedOnDisk += file.length()
                                 android.util.Log.d("ModelDownloadViewModel", "Found additional file in model dir on completion: ${fileName} (${file.length()} bytes)")
                             } else {
@@ -687,15 +815,16 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
                         val expectedTotal = if (latestStatus != null && latestStatus!!.totalBytes > 0) latestStatus!!.totalBytes else model.sizeBytes
 
                         // If expectedTotal is zero or unknown, fall back to comparing against actual bytes (exact equality)
+                        val allFilesFound = model.hasCompleteDownloadedBundle(context)
                         val completeEnough = if (expectedTotal > 0) {
-                            totalDownloadedOnDisk >= (expectedTotal * 0.995).toLong()
+                            allFilesFound && totalDownloadedOnDisk >= (expectedTotal * 0.995).toLong()
                         } else {
-                            // If downloader reported nothing, require the files to be non-empty and at least 90% of previously known size
-                            totalDownloadedOnDisk > 0 && (model.sizeBytes <= 0 || totalDownloadedOnDisk >= (model.sizeBytes * 0.95).toLong())
+                            // If downloader reported nothing, still require every declared component.
+                            allFilesFound && (model.sizeBytes <= 0 || totalDownloadedOnDisk >= (model.sizeBytes * 0.95).toLong())
                         }
 
                         if (completeEnough && cause == null) {
-                            android.util.Log.i("ModelDownloadViewModel", "GGUF model download completed for ${model.name}: size=$totalDownloadedOnDisk, expected=$expectedTotal")
+                            android.util.Log.i("ModelDownloadViewModel", "Multi-file model download completed for ${model.name}: size=$totalDownloadedOnDisk, expected=$expectedTotal")
                             updateModel(model.name) {
                                 it.copy(
                                     isDownloaded = true,
@@ -707,7 +836,7 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
                                 )
                             }
                         } else {
-                            android.util.Log.w("ModelDownloadViewModel", "GGUF model download incomplete for ${model.name}: found=$totalDownloadedOnDisk expected=$expectedTotal")
+                            android.util.Log.w("ModelDownloadViewModel", "Multi-file model download incomplete for ${model.name}: filesComplete=$allFilesFound found=$totalDownloadedOnDisk expected=$expectedTotal")
                             // Partial
                             updateModel(model.name) {
                                 val progress = if (expectedTotal > 0) (totalDownloadedOnDisk.toFloat() / expectedTotal).coerceIn(0f, 1f) else -1f
@@ -807,8 +936,8 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
         val modelsDir = File(context.filesDir, "models")
         if (modelsDir.exists() && modelsDir.isDirectory) {
             try {
-                // Determine if this is a directory-based model (ONNX or GGUF multi-file)
-                if ((model.modelFormat == "onnx" || model.modelFormat == "whisperkit" || model.modelFormat == "gguf") && model.additionalFiles.isNotEmpty()) {
+                // Determine if this is a directory-based model (ONNX, WhisperKit, GGUF, or Music Generation multi-file)
+                if ((model.modelFormat == "onnx" || model.modelFormat == "whisperkit" || model.modelFormat == "gguf" || model.category == "music_generation") && model.additionalFiles.isNotEmpty()) {
                     val modelDirName = model.name.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_.-]"), "")
                     val modelDir = File(modelsDir, modelDirName)
                     if (modelDir.exists() && modelDir.isDirectory) {
@@ -933,9 +1062,10 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
                 // build the list (e.g. after an app restart).
                 val modelsDir = File(context.filesDir, "models")
 
-                // Delete subdirectory for multi-file formats (onnx, whisperkit, gguf with additionalFiles)
+                // Delete subdirectory for multi-file formats (onnx, whisperkit, gguf, or music_generation with additionalFiles)
                 if ((model.modelFormat == "onnx" || model.modelFormat == "whisperkit" ||
-                            (model.modelFormat == "gguf" && model.additionalFiles.isNotEmpty())) &&
+                            (model.modelFormat == "gguf" && model.additionalFiles.isNotEmpty()) ||
+                            (model.category == "music_generation" && model.additionalFiles.isNotEmpty())) &&
                     model.additionalFiles.isNotEmpty()) {
                     val modelDirName = model.name.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_.-]"), "")
                     val modelSubDir = File(modelsDir, modelDirName)
@@ -945,7 +1075,9 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
                     }
                 }
 
-                val primaryFile = File(modelsDir, model.localFileName())
+                val modelDirName = model.name.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_.-]"), "")
+                val modelSubDir = File(modelsDir, modelDirName)
+                val primaryFile = if (model.category == "music_generation" && model.additionalFiles.isNotEmpty()) File(modelSubDir, model.localFileName()) else File(modelsDir, model.localFileName())
                 val legacyFile = File(modelsDir, "${model.name.replace(" ", "_")}.gguf")
                 
                 var deletedPrimary = false
@@ -1192,6 +1324,10 @@ class ModelDownloadViewModel(application: Application) : AndroidViewModel(applic
 
             currentModels[modelIndex] = updatedModel
             _models.value = currentModels
+
+            if (updatedModel.source == "Custom" && updatedModel.isDownloaded) {
+                saveImportedModels()
+            }
         }
     }
 }

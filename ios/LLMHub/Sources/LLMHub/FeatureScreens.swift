@@ -5,7 +5,6 @@ import CoreMedia
 import PhotosUI
 @preconcurrency import Speech
 import UniformTypeIdentifiers
-import RunAnywhere
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -16,7 +15,15 @@ import FoundationModels
 import Network
 #endif
 
-private enum WritingAidMode: String, CaseIterable {
+@MainActor
+private func contextLimitForFeatureModel(_ model: AIModel, fallback: Int = 4096) -> Int {
+    if model.modelFormat == .gguf {
+        return LLMBackend.shared.modelMaxContextWindow(for: model)
+    }
+    return model.contextWindowSize > 0 ? model.contextWindowSize : fallback
+}
+
+enum WritingAidMode: String, CaseIterable {
     case friendly = "writing_aid_tone_friendly"
     case professional = "writing_aid_tone_professional"
     case concise = "writing_aid_tone_concise"
@@ -41,6 +48,7 @@ private let translatorLanguageEnglishNames: [String: String] = [
     "bg": "Bulgarian",
     "my": "Burmese",
     "ca": "Catalan",
+    "ckb": "Central Kurdish (Sorani)",
     "zh-CN": "Chinese (Simplified)",
     "zh-TW": "Chinese (Traditional)",
     "hr": "Croatian",
@@ -117,6 +125,7 @@ private let translatorLanguages: [TranslatorLanguage] = [
     TranslatorLanguage(code: "bg", localizationKey: "lang_bulgarian"),
     TranslatorLanguage(code: "my", localizationKey: "lang_burmese"),
     TranslatorLanguage(code: "ca", localizationKey: "lang_catalan"),
+    TranslatorLanguage(code: "ckb", localizationKey: "lang_central_kurdish"),
     TranslatorLanguage(code: "zh-CN", localizationKey: "lang_chinese"),
     TranslatorLanguage(code: "zh-TW", localizationKey: "lang_chinese_traditional"),
     TranslatorLanguage(code: "hr", localizationKey: "lang_croatian"),
@@ -204,13 +213,7 @@ private func downloadableTranslatorModels() -> [AIModel] {
 }
 
 private func isTranslatorSupportedModel(_ model: AIModel) -> Bool {
-    if model.name.localizedCaseInsensitiveContains("gemma 4 12b") && model.modelFormat == .litertlm {
-        return !model.isDependencyOnly
-    }
-    return !model.isDependencyOnly
-        && model.category == .multimodal
-        && model.supportsVision
-        && (model.name.hasPrefix("Translate Gemma 4B") || (model.name.localizedCaseInsensitiveContains("gemma 4") && !model.name.localizedCaseInsensitiveContains("translate")))
+    model.isLanguageModel && !model.isDependencyOnly
 }
 
 private func usesGemma4TurnTemplate(_ model: AIModel) -> Bool {
@@ -218,7 +221,11 @@ private func usesGemma4TurnTemplate(_ model: AIModel) -> Bool {
 }
 
 private func isNonTranslatorFeatureModel(_ model: AIModel) -> Bool {
-    !model.name.hasPrefix("Translate Gemma") && model.category != .asr
+    model.isLanguageModel && !model.name.hasPrefix("Translate Gemma")
+}
+
+private func isMusicGenerationFeatureModel(_ model: AIModel) -> Bool {
+    model.category == .musicGeneration
 }
 
 private func translatorQuantizationTag(for modelName: String) -> String? {
@@ -245,34 +252,7 @@ private func translatorVisionFamilyName(for modelName: String) -> String {
 @MainActor
 private func translatorHasDownloadedVisionProjector(for model: AIModel) -> Bool {
     guard model.modelFormat == .gguf, model.supportsVision else { return true }
-
-    let family = translatorVisionFamilyName(for: model.name)
-    let quantTag = translatorQuantizationTag(for: model.name)
-
-    let candidates = ModelData.allModels().filter { candidate in
-        candidate.isDependencyOnly
-            && candidate.inferenceFramework == model.inferenceFramework
-            && translatorVisionFamilyName(for: candidate.name) == family
-            && RunAnywhere.isModelDownloaded(candidate.id, framework: candidate.inferenceFramework)
-    }
-
-    guard !candidates.isEmpty else { return false }
-
-    if family.hasPrefix("gemma 4") {
-        return candidates.contains {
-            $0.name.lowercased().contains("f16") || $0.url.lowercased().contains("f16")
-        }
-    }
-
-    if quantTag == "f16" {
-        return candidates.contains { ($0.name.lowercased().contains("f16") || $0.url.lowercased().contains("f16")) }
-    }
-
-    return candidates.contains {
-        $0.name.lowercased().contains("q8_0")
-            || $0.url.lowercased().contains("q8_0")
-            || $0.name.lowercased().contains("bf16")
-    }
+    return LLMBackend.shared.isVisionProjectorAvailable(for: model)
 }
 
 @MainActor
@@ -281,7 +261,22 @@ private func hasDownloadedVisionProjector(for model: AIModel) -> Bool {
     return ModelData.allModels().contains { candidate in
         candidate.isDependencyOnly
             && candidate.inferenceFramework == model.inferenceFramework
-            && RunAnywhere.isModelDownloaded(candidate.id, framework: candidate.inferenceFramework)
+            && isInstalledModelDownloaded(candidate)
+    }
+}
+
+@MainActor
+private func isInstalledModelDownloaded(_ model: AIModel) -> Bool {
+    guard let folderURL = try? SimplifiedFileManager.shared.getModelFolderURL(modelId: model.id, framework: model.inferenceFramework) else {
+        return false
+    }
+
+    guard FileManager.default.fileExists(atPath: folderURL.path) else {
+        return false
+    }
+
+    return model.requiredFileNames.allSatisfy { fileName in
+        FileManager.default.fileExists(atPath: folderURL.appendingPathComponent(fileName).path)
     }
 }
 
@@ -324,7 +319,8 @@ private func downloadableFeatureModels() -> [AIModel] {
 
     var models = ModelData.allModels().filter { model in
         if model.isDependencyOnly { return false }
-        if model.category == .embedding || model.category == .imageGeneration || model.category == .videoGeneration || model.category == .imageUpscale { return false }
+        if model.category == .embedding || model.category == .asr || model.category == .imageGeneration || model.category == .videoGeneration || model.category == .imageUpscale { return false }
+        if model.name.lowercased().contains("vision projector") || model.name.lowercased().contains("mmproj") || model.name.lowercased().contains("projector") { return false }
 
         guard ModelData.isModelFullyAvailableLocally(model) else { return false }
         return true
@@ -342,18 +338,15 @@ private func downloadableFeatureModels() -> [AIModel] {
 
 @MainActor
 private func selectedFeatureModel(named selectedModelName: String) -> AIModel? {
-    downloadableFeatureModels().first(where: { $0.name == selectedModelName })
-        ?? ModelData.allModels().first(where: { $0.name == selectedModelName })
+    if let appleModel = appleFoundationModelIfAvailable(), appleModel.name == selectedModelName {
+        return appleModel
+    }
+    return ModelData.allModels().first(where: { $0.name == selectedModelName })
 }
 
 @MainActor
-private func syncRunAnywhereModelDiscovery() async {
-    do {
-        try RunAnywhere.initialize(environment: .development)
-    } catch {
-        // Ignore repeated initialization attempts.
-    }
-    _ = await RunAnywhere.discoverDownloadedModels()
+private func refreshDownloadedModelStatus() async {
+    ModelDownloadViewModel.shared.refreshStatuses()
 }
 
 @MainActor
@@ -434,7 +427,7 @@ extension View {
     }
 }
 
-private struct FeatureModelSettingsSheet: View {
+struct FeatureModelSettingsSheet: View {
     @EnvironmentObject var settings: AppSettings
     @Binding var selectedModelName: String
     @Binding var maxTokens: Double
@@ -451,15 +444,27 @@ private struct FeatureModelSettingsSheet: View {
     let modelFilter: ((AIModel) -> Bool)?
     let onLoad: () async -> Void
     let onUnload: () -> Void
+    var showsThinkingToggle: Bool = false
+    var extraModelConfigsContent: AnyView? = nil
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var llm = LLMBackend.shared
     @State private var models: [AIModel] = []
     @State private var isRefreshingModels = false
+    @State private var gpuLayersTemp: Double = 999
+    @State private var gpuLayerLimit: Double = 999
 
     private var selectedModel: AIModel? {
         models.first(where: { $0.name == selectedModelName })
             ?? selectedFeatureModel(named: selectedModelName)
+    }
+
+    private var selectedModelSupportsThinking: Bool {
+        guard let model = selectedModel else { return false }
+        let name = model.name.lowercased()
+        if name.contains("lfm") { return false }
+        if name.contains("granite-4.2") || name.contains("granite 4.2") { return false }
+        return model.supportsThinking
     }
 
     private var selectedModelSupportsVision: Bool {
@@ -469,19 +474,26 @@ private struct FeatureModelSettingsSheet: View {
 
     private var selectedModelSupportsAudio: Bool {
         guard let model = selectedModel else { return false }
-        return model.supportsAudio
+        return model.isGemma4LiteRTLM
     }
 
     private var maxContextCap: Double {
-        let advertised = selectedModel?.contextWindowSize ?? 4096
-        return Double(max(1, advertised))
+        guard let selectedModel else { return 4096 }
+        let cap = selectedModel.modelFormat == .gguf
+            ? llm.modelMaxContextWindow(for: selectedModel)
+            : selectedModel.contextWindowSize
+        return Double(max(2, cap))
     }
 
     @ObservedObject private var whisperBackend = WhisperBackend.shared
+    @ObservedObject private var musicBackend = MusicGeneratorBackend.shared
 
     private var isSelectedModelLoaded: Bool {
         if let model = selectedModel, model.isWhisperModel {
             return whisperBackend.isLoaded && whisperBackend.currentModelName == model.name
+        }
+        if selectedModel?.category == .musicGeneration {
+            return musicBackend.isLoaded && musicBackend.loadedModelName == selectedModelName
         }
         return llm.isLoaded && llm.currentlyLoadedModel == selectedModelName
     }
@@ -517,7 +529,7 @@ private struct FeatureModelSettingsSheet: View {
                                 }
                             }
 
-                            if selectedModel?.isWhisperModel != true {
+                            if selectedModel?.isWhisperModel != true && selectedModel?.category != .musicGeneration {
                                 HStack {
                                     Text(settings.localized("context_window_size"))
                                         .foregroundColor(.white)
@@ -526,12 +538,30 @@ private struct FeatureModelSettingsSheet: View {
                                         .foregroundColor(.white.opacity(0.9))
                                         .monospacedDigit()
                                 }
-                                Slider(value: $maxTokens, in: 1...maxContextCap, step: 1) { editing in
-                                    if !editing {
-                                        maxTokens = min(max(1, maxTokens), maxContextCap)
+                                if maxContextCap > 1 {
+                                    Slider(value: $maxTokens, in: 1...maxContextCap, step: 1) { editing in
+                                        if !editing {
+                                            maxTokens = min(max(1, maxTokens), maxContextCap)
+                                        }
                                     }
+                                    .tint(ApolloPalette.accentStrong)
                                 }
-                                .tint(ApolloPalette.accentStrong)
+
+                                if let model = selectedModel, model.modelFormat == .gguf {
+                                    GPULayersSlider(
+                                        value: $gpuLayersTemp,
+                                        maxLayers: gpuLayerLimit,
+                                        label: settings.localized("gpu_layers_label"),
+                                        onCommit: { saveGpuLayers(gpuLayersTemp) }
+                                    )
+                                    .padding(.top, 8)
+                                }
+                            }
+
+                            if showsThinkingToggle && selectedModelSupportsThinking {
+                                Toggle(settings.localized("enable_thinking"), isOn: $enableThinking)
+                                    .tint(ApolloPalette.accentStrong)
+                                    .foregroundColor(.white)
                             }
 
                             if selectedModelSupportsVision {
@@ -561,6 +591,10 @@ private struct FeatureModelSettingsSheet: View {
                                     .tint(ApolloPalette.accentStrong)
                                 }
                             }
+
+                            if let extraModelConfigsContent {
+                                extraModelConfigsContent
+                            }
                         }
                         .padding()
                         .background(.ultraThinMaterial)
@@ -579,7 +613,7 @@ private struct FeatureModelSettingsSheet: View {
                                     if isLoading {
                                         ProgressView()
                                     } else {
-                                        Text(settings.localized("load_model"))
+                                        Text(settings.localized(isSelectedModelLoaded ? "reload_model" : "load_model"))
                                     }
                                     Spacer()
                                 }
@@ -626,7 +660,7 @@ private struct FeatureModelSettingsSheet: View {
             }
             .navigationTitle(settings.localized("feature_settings_title"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(settings.localized("done")) { dismiss() }
@@ -635,9 +669,11 @@ private struct FeatureModelSettingsSheet: View {
             .task {
                 await refreshModelsIfNeeded()
                 normalizeToggleStatesForSelectedModel()
+                loadInitialGpuLayers()
             }
             .onChange(of: selectedModelName) { _, _ in
                 normalizeToggleStatesForSelectedModel()
+                loadInitialGpuLayers()
             }
         }
     }
@@ -645,15 +681,33 @@ private struct FeatureModelSettingsSheet: View {
     private func refreshModelsIfNeeded() async {
         if !models.isEmpty { return }
         isRefreshingModels = true
-        try? RunAnywhere.initialize(environment: .development)
-        let loaded = downloadableFeatureModels().filter { model in
-            modelFilter?(model) ?? true
+        var loaded: [AIModel]
+        if let modelFilter {
+            loaded = ModelData.allModels().filter { model in
+                guard !model.isDependencyOnly else { return false }
+                let cat = model.category
+                guard cat != .embedding && cat != .imageGeneration && cat != .videoGeneration && cat != .imageUpscale else { return false }
+                guard model.name.lowercased().contains("vision projector") == false,
+                      model.name.lowercased().contains("mmproj") == false,
+                      model.name.lowercased().contains("projector") == false else { return false }
+                guard ModelData.isModelFullyAvailableLocally(model) else { return false }
+                return modelFilter(model)
+            }
+        } else {
+            loaded = downloadableFeatureModels()
+        }
+        // Apple's native model is not part of the downloadable model catalog.
+        // Apply the feature capability filter to it just like other candidates.
+        if let appleModel = appleFoundationModelIfAvailable(),
+           modelFilter?(appleModel) ?? true,
+           !loaded.contains(where: { $0.id == appleModel.id }) {
+            loaded.append(appleModel)
         }
         models = loaded
         if selectedModelName.isEmpty || !loaded.contains(where: { $0.name == selectedModelName }) {
             selectedModelName = loaded.first?.name ?? ""
         }
-        let cap = Double(max(1, selectedModel?.contextWindowSize ?? 4096))
+        let cap = Double(maxContextCap)
         maxTokens = min(max(1, maxTokens), cap)
         isRefreshingModels = false
     }
@@ -663,6 +717,37 @@ private struct FeatureModelSettingsSheet: View {
         if supportsVisionToggle && !selectedModelSupportsVision {
             enableVision = false
         }
+    }
+
+    private func loadInitialGpuLayers() {
+        guard let selectedModel = selectedModel else { return }
+        gpuLayerLimit = Double(GGUFLayerLimits.unknown)
+        let key = "gpu_layers_\(selectedModel.id)"
+        if UserDefaults.standard.object(forKey: key) != nil {
+            let stored = UserDefaults.standard.integer(forKey: key)
+            gpuLayersTemp = Double(stored == 99 ? 999 : stored)
+        } else {
+            gpuLayersTemp = 999
+        }
+        if let url = LLMBackend.shared.ggufFileURL(for: selectedModel) {
+            let modelID = selectedModel.id
+            Task {
+                let limit = await Task.detached(priority: .utility) {
+                    GGUFLayerLimits.read(from: url)
+                }.value ?? GGUFLayerLimits.unknown
+                guard self.selectedModel?.id == modelID else { return }
+                gpuLayersTemp = min(max(0, gpuLayersTemp), Double(limit))
+                gpuLayerLimit = Double(limit)
+            }
+        }
+    }
+
+    private func saveGpuLayers(_ value: Double) {
+        guard let selectedModel = selectedModel else { return }
+        let key = "gpu_layers_\(selectedModel.id)"
+        let intValue = Int32(min(max(0, value), gpuLayerLimit))
+        UserDefaults.standard.set(intValue, forKey: key)
+
     }
 }
 
@@ -1036,7 +1121,7 @@ private struct IOS26TranscriberScreen: View {
     @State private var selectedAudioURL: URL?
     @State private var audioTranscriptionTask: Task<Void, Never>?
     @AppStorage("feature_transcriber_model_name") private var selectedModelName: String = ""
-    @AppStorage("feature_transcriber_max_tokens") private var maxTokens: Double = 512
+    @AppStorage("feature_transcriber_max_tokens") private var maxTokens: Double = 4096
     @State private var isModelLoading = false
     @State private var modelLoadError: String? = nil
     @State private var whisperHistory: [TranscriptionSession] = []
@@ -1141,9 +1226,8 @@ private struct IOS26TranscriberScreen: View {
                 .disabled(!canUploadAudio)
 
                 if let selectedAudioURL = transcriber.selectedAudioURL {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform")
-                            .foregroundStyle(.white.opacity(0.85))
+                    HStack(spacing: 10) {
+                        AudioPlaybackButton(url: selectedAudioURL)
                         Text(selectedAudioURL.lastPathComponent)
                             .font(.subheadline)
                             .lineLimit(1)
@@ -1240,8 +1324,7 @@ private struct IOS26TranscriberScreen: View {
         .navigationTitle(settings.localized("transcriber_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -1257,7 +1340,7 @@ private struct IOS26TranscriberScreen: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             FeatureModelSettingsSheet(
                 selectedModelName: $selectedModelName,
                 maxTokens: $maxTokens,
@@ -1291,7 +1374,8 @@ private struct IOS26TranscriberScreen: View {
                     llm.isLoaded = false
                     llm.currentlyLoadedModel = nil
                     llm.unloadModel()
-                }
+                },
+                showsThinkingToggle: false
             )
             .environmentObject(settings)
         }
@@ -1344,7 +1428,10 @@ private struct IOS26TranscriberScreen: View {
         .onAppear {
             // Don't reset selectedModelName — preserve last-used model across visits.
             // Empty = system transcriber (default on first launch via @AppStorage default).
-            Task { await syncRunAnywhereModelDiscovery() }
+            Task { await refreshDownloadedModelStatus() }
+            if maxTokens < 4096 {
+                maxTokens = 4096
+            }
         }
     }
 
@@ -1645,7 +1732,7 @@ private struct IOS26TranscriberScreen: View {
                 try await llm.generate(
                     prompt: "Transcribe this audio.",
                     audioURL: audioInputURL,
-                    maxTokensOverride: 512
+                    maxTokensOverride: Int(max(maxTokens, 4096))
                 ) { text, _, _ in
                     Task { @MainActor in
                         latest = sanitizeModelOutputText(text)
@@ -1672,13 +1759,14 @@ private struct IOS26TranscriberScreen: View {
 
     private func ensureAudioModelLoaded(force: Bool) async {
         guard let model = selectedModel else { return }
-        let modelContextCap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
-        let effectiveContext = min(max(1, Int(maxTokens)), modelContextCap)
+        let modelContextCap = contextLimitForFeatureModel(model)
+        let effectiveTokens = maxTokens < 4096 ? 4096 : maxTokens
+        let effectiveContext = min(max(1, Int(effectiveTokens)), modelContextCap)
         let shouldReload = force
             || llm.currentlyLoadedModel != model.name
             || llm.loadedContextWindow != effectiveContext
 
-        llm.maxTokens = min(Int(maxTokens), effectiveContext)
+        llm.maxTokens = min(Int(effectiveTokens), effectiveContext)
         llm.contextWindow = effectiveContext
         llm.enableVision = false
         // Auto-enable audio when a Gemma4 LiteRT-LM model is selected; no toggle needed.
@@ -1773,8 +1861,8 @@ private struct IOS26TranscriberScreen: View {
                 .disabled(audioRecorder.isRecording || whisper.isTranscribing || isAudioTranscribing)
 
                 if let url = selectedAudioURL {
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform").foregroundStyle(.white.opacity(0.85))
+                    HStack(spacing: 10) {
+                        AudioPlaybackButton(url: url)
                         Text(url.lastPathComponent)
                             .font(.subheadline)
                             .lineLimit(1)
@@ -1864,36 +1952,34 @@ struct TranscriberScreen: View {
     @EnvironmentObject var settings: AppSettings
     let onNavigateBack: () -> Void
 
+    @ViewBuilder
     var body: some View {
-        Group {
-            if #available(iOS 17.0, *) {
-                IOS26TranscriberScreen(onNavigateBack: onNavigateBack)
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "mic.slash")
-                        .font(.system(size: 48, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Text(settings.localized("transcriber_title"))
-                        .font(.title3.weight(.bold))
-                    Text("Live on-device transcriber requires iOS 17 or newer.")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle(settings.localized("transcriber_title"))
-                .navigationBarTitleDisplayMode(.inline)
-                .apolloScreenBackground()
-                .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
-                .toolbarBackground(.hidden, for: .navigationBar)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button {
-                            onNavigateBack()
-                        } label: {
-                            Image(systemName: "arrow.left")
-                        }
+        if #available(iOS 17.0, *) {
+            IOS26TranscriberScreen(onNavigateBack: onNavigateBack)
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "mic.slash")
+                    .font(.system(size: 48, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text(settings.localized("transcriber_title"))
+                    .font(.title3.weight(.bold))
+                Text("Live on-device transcriber requires iOS 17 or newer.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle(settings.localized("transcriber_title"))
+            .navigationBarTitleDisplayMode(.inline)
+            .apolloScreenBackground()
+            .apolloNavigationBackground()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        onNavigateBack()
+                    } label: {
+                        Image(systemName: "arrow.left")
                     }
                 }
             }
@@ -2097,6 +2183,13 @@ private enum VibeVoiceState: Equatable {
     case idle, listening, responding, speaking
 }
 
+private struct ViewHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 @available(iOS 17.0, *)
 private struct IOS17VibeVoiceScreen: View {
     @EnvironmentObject var settings: AppSettings
@@ -2116,6 +2209,8 @@ private struct IOS17VibeVoiceScreen: View {
     @StateObject private var transcriber = IOSVibeVoiceTranscriber()
     @StateObject private var audioRecorder = AudioRecorder()
     @State private var lastRecordedAudioURL: URL?
+    @State private var replyContentHeight: CGFloat = 0
+    @State private var ttsReadCursor = 0
 
     private let ttsKey = "vibevoice-reply"
 
@@ -2142,8 +2237,7 @@ private struct IOS17VibeVoiceScreen: View {
         .navigationTitle(settings.localized("feature_vibevoice"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -2160,7 +2254,7 @@ private struct IOS17VibeVoiceScreen: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             FeatureModelSettingsSheet(
                 selectedModelName: $selectedModelName,
                 maxTokens: $maxTokens,
@@ -2176,17 +2270,17 @@ private struct IOS17VibeVoiceScreen: View {
                 writingMode: nil,
                 modelFilter: isNonTranslatorFeatureModel,
                 onLoad: { await ensureModelLoaded(force: false) },
-                onUnload: { llm.unloadModel() }
+                onUnload: { llm.unloadModel() },
+                showsThinkingToggle: false
             )
             .environmentObject(settings)
         }
         .onAppear {
             Task {
-                try? RunAnywhere.initialize(environment: .development)
                 let available = downloadableFeatureModels().filter(isNonTranslatorFeatureModel)
-                // Only set a default if no model was previously selected.
-                // @AppStorage preserves the last used model across launches.
-                if selectedModelName.isEmpty {
+                // Preserve a valid last-used LLM, but clear any stale selection
+                // left by older builds that exposed dedicated media models here.
+                if selectedModelName.isEmpty || !available.contains(where: { $0.name == selectedModelName }) {
                     selectedModelName = available.first?.name ?? ""
                 }
             }
@@ -2200,7 +2294,11 @@ private struct IOS17VibeVoiceScreen: View {
         .onChange(of: ttsManager.isSpeaking) { oldValue, newValue in
             NSLog("[LLMHub][VibeVoice] onChange(ttsManager.isSpeaking): \(oldValue) -> \(newValue), current voiceState: \(voiceState)")
             guard isChatActive else { return }
-            if oldValue && !newValue && voiceState == .speaking {
+            if !oldValue && newValue {
+                if voiceState == .responding || voiceState == .idle {
+                    voiceState = .speaking
+                }
+            } else if oldValue && !newValue && voiceState == .speaking {
                 NSLog("[LLMHub][VibeVoice] TTS finished speaking. Setting voiceState to .idle and scheduling startListeningCycle()")
                 voiceState = .idle
                 Task { @MainActor in
@@ -2358,24 +2456,41 @@ private struct IOS17VibeVoiceScreen: View {
 
             // Latest AI reply card
             if !latestReply.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(latestReply)
-                        .font(.body)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                        )
-
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        Text(latestReply)
+                            .font(.body)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear
+                                        .preference(key: ViewHeightKey.self, value: geo.size.height)
+                                }
+                            )
+                            .id("bottom")
+                    }
+                    .onPreferenceChange(ViewHeightKey.self) { height in
+                        replyContentHeight = height
+                    }
+                    .onChange(of: latestReply) { _, _ in
+                        withAnimation {
+                            proxy.scrollTo("bottom", anchor: .bottom)
+                        }
+                    }
+                    .frame(height: min(replyContentHeight, 250))
+                    .padding(14)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(.spring(duration: 0.3), value: latestReply)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                .animation(.spring(duration: 0.3), value: latestReply)
             }
 
             Spacer()
@@ -2389,7 +2504,7 @@ private struct IOS17VibeVoiceScreen: View {
         if !isChatActive { return "mic" }
         switch voiceState {
         case .listening: return "mic.fill"
-        case .responding: return "ellipsis.circle"
+        case .responding: return "ellipsis"
         case .speaking: return "speaker.wave.2.fill"
         case .idle: return "mic"
         }
@@ -2469,6 +2584,7 @@ private struct IOS17VibeVoiceScreen: View {
         guard isChatActive else { return }
         voiceState = .responding
         latestReply = ""
+        ttsReadCursor = 0
 
         await ensureModelLoaded(force: false)
         guard llm.isLoaded && isChatActive else {
@@ -2502,9 +2618,18 @@ private struct IOS17VibeVoiceScreen: View {
         var truncatedHistory: [(role: String, content: String)] = []
         for msg in conversationHistory.reversed() {
             let msgLen = msg.content.count
-            if currentChars + msgLen < maxHistoryChars {
+            let remaining = maxHistoryChars - currentChars
+            if msgLen <= remaining {
                 truncatedHistory.insert(msg, at: 0)
                 currentChars += msgLen
+            } else if remaining > 300 {
+                // Message exceeds remaining budget — truncate its MIDDLE so both
+                // the opening and closing of a long reply are preserved.
+                let half = remaining / 2
+                let elided = (role: msg.role, content: String(msg.content.prefix(half)) + "\n…\n" + String(msg.content.suffix(half)))
+                truncatedHistory.insert(elided, at: 0)
+                currentChars = maxHistoryChars
+                break
             } else {
                 break
             }
@@ -2513,10 +2638,17 @@ private struct IOS17VibeVoiceScreen: View {
         // 3. Family Detection
         let modelName = selectedModelName.lowercased()
         let modelSupportsThinking = selectedFeatureModel(named: selectedModelName)?.supportsThinking == true
-        let isGemma  = modelName.contains("gemma")
-        let isGemma4 = isGemma && (modelName.contains("gemma 4") || modelName.contains("gemma-4")) && !modelName.contains("translate")
-        let isLlama  = modelName.contains("llama") || modelName.contains("mistral")
+        let isGemma      = modelName.contains("gemma")
+        let isGemma4     = isGemma && (modelName.contains("gemma 4") || modelName.contains("gemma-4")) && !modelName.contains("translate")
+        let isLlama      = modelName.contains("llama") || modelName.contains("mistral")
+        let isLlama3     = isLlama && (modelName.contains("llama-3") || modelName.contains("llama 3") || modelName.contains("llama-3."))
         let isHarmonyModel = modelName.contains("gpt-oss") || modelName.contains("gpt_oss")
+        let isMuseGlimmer = selectedFeatureModel(named: selectedModelName)?.chatTemplateFamily == .museGlimmer
+        let isGranite42  = modelName.contains("granite-4.2") || modelName.contains("granite 4.2")
+        let isGranite    = modelName.contains("granite") && !isGranite42
+        let isPhi4       = modelName.contains("phi-4") || modelName.contains("phi 4") || modelName.contains("phi4")
+        // LFM (Liquid AI) and similar ChatML-style models
+        let isChatML     = modelName.contains("lfm") || modelName.contains("liquid")
 
         // 4. Build Raw Prompt (Prepend __RAW_PROMPT__ to bypass SDK auto-formatting)
         var parts: [String] = ["__RAW_PROMPT__"]
@@ -2532,16 +2664,16 @@ private struct IOS17VibeVoiceScreen: View {
                 harmonyParts.append("<|start|>\(role)<|message|>\(content)<|end|>")
             }
 
-            if modelSupportsThinking && llm.enableThinking {
-                harmonyParts.append("<|start|>assistant")
-            } else {
-                harmonyParts.append("<|start|>assistant<|channel|>analysis<|message|><|end|><|start|>assistant<|channel|>final<|message|>")
-            }
+            // VibeVoice always disables thinking — no reasoning should be generated or shown
+            harmonyParts.append("<|start|>assistant<|channel|>analysis<|message|><|end|><|start|>assistant<|channel|>final<|message|>")
             parts.append(contentsOf: harmonyParts)
             let multiTurnPrompt = parts.joined()
 
             generationTask = Task {
                 do {
+                    let savedThinking = self.llm.enableThinking
+                    self.llm.enableThinking = false
+                    defer { self.llm.enableThinking = savedThinking }
                     try await llm.generate(
                         prompt: multiTurnPrompt,
                         maxTokensOverride: Int(maxTokens)
@@ -2550,6 +2682,12 @@ private struct IOS17VibeVoiceScreen: View {
                             let sanitized = sanitizeModelOutputText(content)
                             let answerSoFar = getDisplayContentWithoutThinking(sanitized)
                             self.latestReply = answerSoFar
+
+                            let delta = String(answerSoFar.dropFirst(self.ttsReadCursor))
+                            if !delta.isEmpty {
+                                self.ttsReadCursor = answerSoFar.count
+                                self.ttsManager.addStreamingToken(delta, fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                            }
                         }
                     }
                 } catch {
@@ -2558,15 +2696,36 @@ private struct IOS17VibeVoiceScreen: View {
                 await MainActor.run {
                     self.generationTask = nil
                     guard self.isChatActive else { return }
+
+                    let displayContent = getDisplayContentWithoutThinking(self.latestReply)
+                    if displayContent.count > self.ttsReadCursor {
+                        let delta = String(displayContent.dropFirst(self.ttsReadCursor))
+                        if !delta.isEmpty {
+                            self.ttsManager.addStreamingToken(delta, fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                        }
+                    }
+                    self.ttsManager.flushStreamingBuffer(fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                    self.ttsReadCursor = 0
+
                     let rawReply = self.latestReply.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !rawReply.isEmpty {
-                        let answerOnly = getDisplayContentWithoutThinking(rawReply)
-                        let replyForTts = answerOnly.isEmpty ? rawReply : answerOnly
-                        self.latestReply = replyForTts
-                        self.conversationHistory.append((role: "assistant", content: replyForTts))
-                        self.voiceState = .speaking
-                        self.ttsManager.speak(replyForTts, fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                    let replyForHistory = getDisplayContentWithoutThinking(rawReply)
+                    let finalReply = replyForHistory.isEmpty ? rawReply : replyForHistory
+                    if !finalReply.isEmpty && !contentHasThinkingMarkers(finalReply) {
+                        self.latestReply = finalReply
+                        self.conversationHistory.append((role: "assistant", content: finalReply))
+                        if self.ttsManager.isSpeaking(key: self.ttsKey) {
+                            self.voiceState = .speaking
+                        } else {
+                            self.voiceState = .idle
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 350_000_000)
+                                if self.isChatActive {
+                                    await self.startListeningCycle()
+                                }
+                            }
+                        }
                     } else {
+                        self.latestReply = ""
                         self.voiceState = .idle
                         Task { @MainActor in
                             try? await Task.sleep(nanoseconds: 350_000_000)
@@ -2579,15 +2738,92 @@ private struct IOS17VibeVoiceScreen: View {
             }
             return
         }
-        
-        // When using RAW_PROMPT, the SDK's systemPrompt argument is ignored, 
+
+        if isMuseGlimmer {
+            let dateFormatter = DateFormatter()
+            dateFormatter.calendar = Calendar(identifier: .gregorian)
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+
+            var museParts: [String] = []
+            museParts.append("<|begin_of_text|>")
+            museParts.append("<|start|>system<|message|>\(systemPrompt)\nKnowledge cutoff: 2026-01-04.\nCurrent date: \(dateFormatter.string(from: Date())).\n\nReasoning strength: high.\n\n# Valid recipients: \"user\".<|eot|>")
+
+            for msg in truncatedHistory {
+                let content = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !content.isEmpty else { continue }
+                if msg.role == "user" {
+                    museParts.append("<|start|>user<|message|>\(content)<|eot|>")
+                } else {
+                    museParts.append("<|start|>assistant to=user<|message|>\(content)<|eot|>")
+                }
+            }
+
+            museParts.append("<|start|>user<|message|>\(text)<|eot|>")
+            museParts.append("<|start|>assistant to=user<|message|>")
+            parts.append(contentsOf: museParts)
+            let multiTurnPrompt = parts.joined()
+
+            generationTask = Task {
+                do {
+                    let savedThinking = self.llm.enableThinking
+                    self.llm.enableThinking = false
+                    defer { self.llm.enableThinking = savedThinking }
+                    try await llm.generate(
+                        prompt: multiTurnPrompt,
+                        maxTokensOverride: Int(maxTokens)
+                    ) { content, _, _ in
+                        Task { @MainActor in
+                            let sanitized = sanitizeModelOutputText(content)
+                            let answerSoFar = getDisplayContentWithoutThinking(sanitized)
+                            self.latestReply = answerSoFar.isEmpty ? sanitized : answerSoFar
+
+                            let delta = String(self.latestReply.dropFirst(self.ttsReadCursor))
+                            if !delta.isEmpty {
+                                self.ttsReadCursor = self.latestReply.count
+                                self.ttsManager.addStreamingToken(delta, fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                            }
+                        }
+                    }
+                } catch {
+                    NSLog("[LLMHub][VibeVoice] LLM error: \(error.localizedDescription)")
+                }
+                await MainActor.run {
+                    self.generationTask = nil
+                    guard self.isChatActive else { return }
+
+                    let finalReply = self.latestReply.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !finalReply.isEmpty {
+                        self.conversationHistory.append((role: "assistant", content: finalReply))
+                        self.ttsManager.flushStreamingBuffer(fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                        self.ttsReadCursor = 0
+                        self.voiceState = self.ttsManager.isSpeaking(key: self.ttsKey) ? .speaking : .idle
+                    } else {
+                        self.voiceState = .idle
+                    }
+                }
+            }
+            return
+        }
+
+        // When using RAW_PROMPT, the SDK's systemPrompt argument is ignored,
         // so we must inject it manually into our sequence.
-        if isGemma4 {
+        if isPhi4 {
+            parts.append("<|system|>\n\(systemPrompt)<|end|>")
+        } else if isGemma4 {
             parts.append("<|turn>system\n\(systemPrompt)<turn|>")
         } else if isGemma {
             parts.append("<start_of_turn>system\n\(systemPrompt)<end_of_turn>")
+        } else if isLlama3 {
+            parts.append("<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n\(systemPrompt)<|eot_id|>")
         } else if isLlama {
             parts.append("<<SYS>>\n\(systemPrompt)\n<</SYS>>")
+        } else if isGranite42 {
+            parts.append("<|im_start|>system\n\(systemPrompt)<|im_end|>")
+        } else if isGranite {
+            parts.append("<|start_of_role|>system<|end_of_role|>\(systemPrompt)<|end_of_text|>")
+        } else if isChatML {
+            parts.append("<|startoftext|><|im_start|>system\n\(systemPrompt)<|im_end|>")
         } else {
             parts.append("System: \(systemPrompt)")
         }
@@ -2596,18 +2832,34 @@ private struct IOS17VibeVoiceScreen: View {
             let content = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !content.isEmpty else { continue }
 
-            if isGemma4 {
+            if isPhi4 {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|\(role)|>\n\(content)<|end|>")
+            } else if isGemma4 {
                 let role = (msg.role == "user") ? "user" : "model"
                 parts.append("<|turn>\(role)\n\(content)<turn|>")
             } else if isGemma {
                 let role = (msg.role == "user") ? "user" : "model"
                 parts.append("<start_of_turn>\(role)\n\(content)<end_of_turn>")
+            } else if isLlama3 {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|start_header_id|>\(role)<|end_header_id|>\n\n\(content)<|eot_id|>")
             } else if isLlama {
                 if msg.role == "user" {
                     parts.append("[INST] \(content) [/INST]")
                 } else {
                     parts.append(content)
                 }
+            } else if isGranite42 {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                let prefix = (role == "assistant") ? "<think></think>" : ""
+                parts.append("<|im_start|>\(role)\n\(prefix)\(content)<|im_end|>")
+            } else if isGranite {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|start_of_role|>\(role)<|end_of_role|>\(content)<|end_of_text|>")
+            } else if isChatML {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|im_start|>\(role)\n\(content)<|im_end|>")
             } else {
                 let prefix = (msg.role == "user") ? "User" : "Assistant"
                 parts.append("\(prefix): \(content)")
@@ -2615,10 +2867,27 @@ private struct IOS17VibeVoiceScreen: View {
         }
 
         // Final Open Turn (Assistant)
-        if isGemma4 {
+        if isPhi4 {
+            parts.append("<|user|>\n\(text)<|end|>")
+            parts.append("<|assistant|>\n")
+        } else if isGemma4 {
+            parts.append("<|turn>user\n\(text)<turn|>")
             parts.append("<|turn>model\n")
         } else if isGemma {
+            parts.append("<start_of_turn>user\n\(text)<end_of_turn>")
             parts.append("<start_of_turn>model\n")
+        } else if isLlama3 {
+            parts.append("<|start_header_id|>user<|end_header_id|>\n\n\(text)<|eot_id|>")
+            parts.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
+        } else if isGranite42 {
+            parts.append("<|im_start|>user\n\(text)<|im_end|>")
+            parts.append("<|im_start|>assistant\n<think></think>")
+        } else if isGranite {
+            parts.append("<|start_of_role|>user<|end_of_role|>\(text)<|end_of_text|>")
+            parts.append("<|start_of_role|>assistant<|end_of_role|>")
+        } else if isChatML {
+            parts.append("<|im_start|>user\n\(text)<|im_end|>")
+            parts.append("<|im_start|>assistant\n")
         } else {
             parts.append("Assistant:")
         }
@@ -2627,6 +2896,9 @@ private struct IOS17VibeVoiceScreen: View {
 
         generationTask = Task {
             do {
+                let savedThinking = self.llm.enableThinking
+                self.llm.enableThinking = false
+                defer { self.llm.enableThinking = savedThinking }
                 try await llm.generate(
                     prompt: multiTurnPrompt,
                     systemPrompt: nil,
@@ -2634,10 +2906,14 @@ private struct IOS17VibeVoiceScreen: View {
                 ) { content, _, _ in
                     Task { @MainActor in
                         let sanitized = sanitizeModelOutputText(content)
-                        // During streaming, show only the answer portion — never show thinking tokens
-                        // in the voice UI card. While still in thinking phase the card is hidden.
                         let answerSoFar = getDisplayContentWithoutThinking(sanitized)
                         self.latestReply = answerSoFar
+
+                        let delta = String(answerSoFar.dropFirst(self.ttsReadCursor))
+                        if !delta.isEmpty {
+                            self.ttsReadCursor = answerSoFar.count
+                            self.ttsManager.addStreamingToken(delta, fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                        }
                     }
                 }
             } catch {
@@ -2646,18 +2922,35 @@ private struct IOS17VibeVoiceScreen: View {
             await MainActor.run {
                 self.generationTask = nil
                 guard self.isChatActive else { return }
+
+                let displayContent = getDisplayContentWithoutThinking(self.latestReply)
+                if displayContent.count > self.ttsReadCursor {
+                    let delta = String(displayContent.dropFirst(self.ttsReadCursor))
+                    if !delta.isEmpty {
+                        self.ttsManager.addStreamingToken(delta, fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                    }
+                }
+                self.ttsManager.flushStreamingBuffer(fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                self.ttsReadCursor = 0
+
                 let rawReply = self.latestReply.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !rawReply.isEmpty {
-                    // Strip thinking tokens: store only the answer in history and speak only the answer.
-                    let answerOnly = getDisplayContentWithoutThinking(rawReply)
-                    let replyForTts = answerOnly.isEmpty ? rawReply : answerOnly
-                    // Update latestReply UI with stripped content so the card shows only the answer
-                    self.latestReply = replyForTts
-                    // Store answer (not thinking chain) in conversation history
-                    self.conversationHistory.append((role: "assistant", content: replyForTts))
-                    self.voiceState = .speaking
-                    self.ttsManager.speak(replyForTts, fallbackLanguage: self.settings.selectedLanguage, key: self.ttsKey)
+                let replyForHistory = getDisplayContentWithoutThinking(rawReply)
+                let finalReply = replyForHistory.isEmpty ? rawReply : replyForHistory
+                if !finalReply.isEmpty && !contentHasThinkingMarkers(finalReply) {
+                    self.latestReply = finalReply
+                    self.conversationHistory.append((role: "assistant", content: finalReply))
+                    if self.ttsManager.isSpeaking(key: self.ttsKey) {
+                        self.voiceState = .speaking
+                    } else {
+                        self.voiceState = .idle
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            guard self.isChatActive && self.isCurrentModelLoaded else { return }
+                            await self.startListeningCycle()
+                        }
+                    }
                 } else {
+                    self.latestReply = ""
                     self.voiceState = .idle
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 300_000_000)
@@ -2725,7 +3018,7 @@ private struct IOS17VibeVoiceScreen: View {
         isLoading = true
         defer { isLoading = false }
 
-        let modelContextCap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+        let modelContextCap = contextLimitForFeatureModel(model)
         let effectiveContext = min(max(1, Int(maxTokens)), modelContextCap)
         let shouldReload = force
             || llm.currentlyLoadedModel != model.name
@@ -2782,7 +3075,7 @@ struct WritingAidScreen: View {
             return val
         }
         if let model = selectedFeatureModel(named: modelName) {
-            let cap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+            let cap = contextLimitForFeatureModel(model)
             return Double(min(4096, cap))
         }
         return 4096
@@ -2996,9 +3289,8 @@ struct WritingAidScreen: View {
         .navigationTitle(settings.localized("writing_aid_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -3013,7 +3305,7 @@ struct WritingAidScreen: View {
                 Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             FeatureModelSettingsSheet(
                 selectedModelName: $selectedModelName,
                 maxTokens: $maxTokens,
@@ -3029,13 +3321,14 @@ struct WritingAidScreen: View {
                 writingMode: selectedModeBinding,
                 modelFilter: isNonTranslatorFeatureModel,
                 onLoad: { await ensureModelLoaded(force: false) },
-                onUnload: { llm.unloadModel() }
+                onUnload: { llm.unloadModel() },
+                showsThinkingToggle: true
             )
             .environmentObject(settings)
         }
         .onAppear {
             Task {
-                await syncRunAnywhereModelDiscovery()
+                await refreshDownloadedModelStatus()
                 let available = downloadableFeatureModels().filter(isNonTranslatorFeatureModel)
                 if selectedModelName.isEmpty || !available.contains(where: { $0.name == selectedModelName }) {
                     selectedModelName = available.first?.name ?? ""
@@ -3055,8 +3348,7 @@ struct WritingAidScreen: View {
         }
     }
 
-    private func writingPrompt() -> String {
-        let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func writingSystemPrompt() -> String {
         switch WritingAidMode(rawValue: selectedModeRaw) ?? .friendly {
         case .friendly:
             return """
@@ -3067,9 +3359,6 @@ struct WritingAidScreen: View {
             Provide only the rewritten text without any explanations, warnings, or commentary.
 
             IMPORTANT: Respond in the same language as the input text.
-
-            Text to rewrite:
-            \(content)
             """
         case .professional:
             return """
@@ -3080,9 +3369,6 @@ struct WritingAidScreen: View {
             Provide only the rewritten text without any explanations, warnings, or commentary.
 
             IMPORTANT: Respond in the same language as the input text.
-
-            Text to rewrite:
-            \(content)
             """
         case .concise:
             return """
@@ -3093,9 +3379,6 @@ struct WritingAidScreen: View {
             Provide only the rewritten text without any explanations, warnings, or commentary.
 
             IMPORTANT: Respond in the same language as the input text.
-
-            Text to rewrite:
-            \(content)
             """
         }
     }
@@ -3108,7 +3391,7 @@ struct WritingAidScreen: View {
         isLoading = true
         defer { isLoading = false }
 
-        let modelContextCap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+        let modelContextCap = contextLimitForFeatureModel(model)
         let effectiveContext = min(max(1, Int(maxTokens)), modelContextCap)
         let shouldReload = force
             || llm.currentlyLoadedModel != model.name
@@ -3118,7 +3401,8 @@ struct WritingAidScreen: View {
         llm.contextWindow = effectiveContext
         llm.enableVision = false
         llm.enableAudio = false
-        llm.enableThinking = enableThinking
+        let isGranite42 = selectedModelName.lowercased().contains("granite-4.2") || selectedModelName.lowercased().contains("granite 4.2")
+        llm.enableThinking = isGranite42 ? false : enableThinking
 
         do {
             if shouldReload {
@@ -3147,7 +3431,11 @@ struct WritingAidScreen: View {
             isProcessing = true
             outputText = ""
             do {
-                try await llm.generate(prompt: writingPrompt()) { text, _, _ in
+                let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+                try await llm.generate(
+                    prompt: content,
+                    systemPrompt: writingSystemPrompt()
+                ) { text, _, _ in
                     Task { @MainActor in
                         outputText = sanitizeModelOutputText(text)
                     }
@@ -3174,7 +3462,7 @@ struct TranslatorScreen: View {
             return val
         }
         if let model = selectedFeatureModel(named: modelName) {
-            let cap = model.contextWindowSize > 0 ? model.contextWindowSize : 2048
+            let cap = contextLimitForFeatureModel(model, fallback: 2048)
             return Double(min(2048, cap))
         }
         return 2048
@@ -3209,7 +3497,7 @@ struct TranslatorScreen: View {
     @ObservedObject private var llm = LLMBackend.shared
 
     private var selectedModel: AIModel? {
-        ModelData.allModels().first(where: { $0.name == selectedModelName && isTranslatorSupportedModel($0) })
+        selectedFeatureModel(named: selectedModelName).flatMap { isTranslatorSupportedModel($0) ? $0 : nil }
     }
 
     private var isCurrentModelLoaded: Bool {
@@ -3255,10 +3543,7 @@ struct TranslatorScreen: View {
 
     private var canUseAudioInput: Bool {
         guard let model = selectedModel else { return false }
-        return enableAudio
-            && model.supportsAudio
-            && model.modelFormat == .litertlm
-            && model.name.lowercased().contains("gemma 4")
+        return enableAudio && model.isGemma4LiteRTLM
     }
 
     var body: some View {
@@ -3272,9 +3557,8 @@ struct TranslatorScreen: View {
         .navigationTitle(settings.localized("translator_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -3289,7 +3573,7 @@ struct TranslatorScreen: View {
                 Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             FeatureModelSettingsSheet(
                 selectedModelName: $selectedModelName,
                 maxTokens: $maxTokens,
@@ -3305,14 +3589,15 @@ struct TranslatorScreen: View {
                 writingMode: nil,
                 modelFilter: isTranslatorSupportedModel,
                 onLoad: { await ensureModelLoaded(force: false) },
-                onUnload: { llm.unloadModel() }
+                onUnload: { llm.unloadModel() },
+                showsThinkingToggle: false
             )
             .environmentObject(settings)
         }
         .onChange(of: showSettings) { _, isPresented in
             if !isPresented {
                 Task {
-                    await syncRunAnywhereModelDiscovery()
+                    await refreshDownloadedModelStatus()
                     let available = downloadableFeatureModels().filter(isTranslatorSupportedModel)
                     availableTranslatorModels = available
                     if selectedModelName.isEmpty || !available.contains(where: { $0.name == selectedModelName }) {
@@ -3323,7 +3608,7 @@ struct TranslatorScreen: View {
         }
         .onAppear {
             Task {
-                await syncRunAnywhereModelDiscovery()
+                await refreshDownloadedModelStatus()
                 let available = downloadableFeatureModels().filter(isTranslatorSupportedModel)
                 availableTranslatorModels = available
                 if selectedModelName.isEmpty || !available.contains(where: { $0.name == selectedModelName }) {
@@ -3401,7 +3686,7 @@ struct TranslatorScreen: View {
             Image(systemName: "network")
                 .font(.system(size: 48, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Text(settings.localized(requiresDownload ? "translator_requires_gemma3n" : "scam_detector_load_model"))
+            Text(settings.localized(requiresDownload ? "load_model_to_start" : "scam_detector_load_model"))
                 .font(.title3.weight(.bold))
                 .multilineTextAlignment(.center)
             Text(settings.localized(requiresDownload ? "translator_load_model_desc" : "scam_detector_load_model_desc"))
@@ -3538,7 +3823,7 @@ struct TranslatorScreen: View {
                         .featureActionIconButtonStyle()
                     }
 
-                    if enableVision {
+                    if enableVision && (selectedModel?.supportsVision == true) {
                         PhotosPicker(selection: $selectedImageItem, matching: .images) {
                             Image(systemName: hasSelectedImage ? "photo.badge.plus" : "photo")
                                 .font(.system(size: 18, weight: .semibold))
@@ -3789,16 +4074,17 @@ struct TranslatorScreen: View {
         let hasAudio = selectedAudioURL != nil && canUseAudioInput
         let hasImage = selectedImageURL != nil && enableVision && !hasAudio
 
+        let rawPromptText: String
+
         if hasAudio {
             if let source = source {
                 let sourceName = englishName(for: source)
                 let sourceCode = source.code.replacingOccurrences(of: "_", with: "-")
-                return "Transcribe the spoken audio in \(sourceName) (\(sourceCode)) and translate it into \(targetName) (\(targetCode)). Respond ONLY with the translated \(targetName) text and no commentary."
+                rawPromptText = "Transcribe the spoken audio in \(sourceName) (\(sourceCode)) and translate it into \(targetName) (\(targetCode)). Respond ONLY with the translated \(targetName) text and no commentary."
+            } else {
+                rawPromptText = "Transcribe the spoken audio and translate it into \(targetName) (\(targetCode)). Respond ONLY with the translated \(targetName) text and no commentary."
             }
-            return "Transcribe the spoken audio and translate it into \(targetName) (\(targetCode)). Respond ONLY with the translated \(targetName) text and no commentary."
-        }
-
-        if hasImage {
+        } else if hasImage {
             let srcPart: String
             if let source = source {
                 let srcName = englishName(for: source)
@@ -3808,32 +4094,38 @@ struct TranslatorScreen: View {
                 srcPart = "You are a professional translator. Your goal is to accurately convey the meaning and nuances of the original text while adhering to \(targetName) grammar, vocabulary, and cultural sensitivities.\nPlease translate the text in the provided image into \(targetName). Produce only the \(targetName) translation, without any additional explanations, alternatives or commentary. Focus only on the text, do not output where the text is located, surrounding objects or any other explanation about the picture. Ignore symbols, pictogram, and arrows!"
             }
             let extra = trimmedInput.isEmpty ? "" : "\n\(trimmedInput)"
-            return srcPart + extra
-        }
-
-        if !isTranslateGemma {
+            rawPromptText = srcPart + extra
+        } else if !isTranslateGemma {
             if let source = source {
                 let sourceName = englishName(for: source)
                 let sourceCode = source.code.replacingOccurrences(of: "_", with: "-")
-                return "You are a professional translator. Translate the following \(sourceName) (\(sourceCode)) text into \(targetName) (\(targetCode)). Preserve meaning and nuance. Respond with only the translated \(targetName) text and no commentary.\n\n\(trimmedInput)"
+                rawPromptText = "You are a professional translator. Translate the following \(sourceName) (\(sourceCode)) text into \(targetName) (\(targetCode)). Preserve meaning and nuance. Respond with only the translated \(targetName) text and no commentary.\n\n\(trimmedInput)"
+            } else {
+                rawPromptText = "You are a professional translator. Detect the source language and translate the following text into \(targetName) (\(targetCode)). Preserve meaning and nuance. Respond with only the translated \(targetName) text and no commentary.\n\n\(trimmedInput)"
             }
-
-            return "You are a professional translator. Detect the source language and translate the following text into \(targetName) (\(targetCode)). Preserve meaning and nuance. Respond with only the translated \(targetName) text and no commentary.\n\n\(trimmedInput)"
+        } else {
+            rawPromptText = rawTranslateGemmaPrompt(source: source, target: targetLanguage, text: trimmedInput)
         }
 
-        return rawTranslateGemmaPrompt(source: source, target: targetLanguage, text: trimmedInput)
+        if let model = selectedModel, model.name.localizedCaseInsensitiveContains("gemma") {
+            if !rawPromptText.contains("<start_of_turn>") {
+                return "<start_of_turn>user\n\(rawPromptText)<end_of_turn>\n<start_of_turn>model\n"
+            }
+        }
+
+        return rawPromptText
     }
 
     private func ensureModelLoaded(force: Bool) async {
         guard let model = selectedModel else {
-            errorMessage = settings.localized("translator_requires_gemma3n")
+            errorMessage = settings.localized("scam_detector_load_model")
             return
         }
 
         isLoading = true
         defer { isLoading = false }
 
-        let modelContextCap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+        let modelContextCap = contextLimitForFeatureModel(model)
         let effectiveContext = min(max(1, Int(maxTokens)), modelContextCap)
         let shouldReload = force
             || llm.currentlyLoadedModel != model.name
@@ -3855,6 +4147,41 @@ struct TranslatorScreen: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func sanitizeTranslatorOutput(_ text: String) -> String {
+        let base = sanitizeModelOutputText(text)
+        let markers = [
+            "\nuser:",
+            "\nassistant:",
+            "\nUser:",
+            "\nAssistant:",
+            "\n\nuser:",
+            "\n\nassistant:",
+            "\n\nUser:",
+            "\n\nAssistant:",
+            "<start_of_turn>",
+            "<end_of_turn>",
+            "<|turn|>",
+            "<|im_start|>",
+            "<|im_end|>"
+        ]
+        var result = base
+        for marker in markers {
+            if let range = result.range(of: marker) {
+                result = String(result[..<range.lowerBound])
+            }
+        }
+        if result.hasPrefix("assistant:\n") {
+            result = String(result.dropFirst("assistant:\n".count))
+        } else if result.hasPrefix("Assistant:\n") {
+            result = String(result.dropFirst("Assistant:\n".count))
+        } else if result.hasPrefix("assistant:") {
+            result = String(result.dropFirst("assistant:".count))
+        } else if result.hasPrefix("Assistant:") {
+            result = String(result.dropFirst("Assistant:".count))
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func toggleTranslate() {
@@ -3900,11 +4227,14 @@ struct TranslatorScreen: View {
                         "<end_of_turn>",
                         "<start_of_turn>",
                         "<|im_start|>",
-                        "<|im_end|>"
+                        "<|im_end|>",
+                        "<|eot_id|>",
+                        "</s>",
+                        "<eos>"
                     ]
                 ) { text, _, _ in
                     Task { @MainActor in
-                        outputText = sanitizeModelOutputText(text)
+                        outputText = sanitizeTranslatorOutput(text)
                     }
                 }
             } catch is CancellationError {
@@ -3932,7 +4262,7 @@ struct ScamDetectorScreen: View {
             return val
         }
         if let model = selectedFeatureModel(named: modelName) {
-            let cap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+            let cap = contextLimitForFeatureModel(model)
             return Double(min(4096, cap))
         }
         return 4096
@@ -4211,9 +4541,8 @@ struct ScamDetectorScreen: View {
         .navigationTitle(settings.localized("scam_detector_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -4228,7 +4557,7 @@ struct ScamDetectorScreen: View {
                 Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             FeatureModelSettingsSheet(
                 selectedModelName: $selectedModelName,
                 maxTokens: $maxTokens,
@@ -4244,13 +4573,14 @@ struct ScamDetectorScreen: View {
                 writingMode: nil,
                 modelFilter: isNonTranslatorFeatureModel,
                 onLoad: { await ensureModelLoaded(force: false) },
-                onUnload: { llm.unloadModel() }
+                onUnload: { llm.unloadModel() },
+                showsThinkingToggle: true
             )
             .environmentObject(settings)
         }
         .onAppear {
             Task {
-                await syncRunAnywhereModelDiscovery()
+                await refreshDownloadedModelStatus()
                 let available = downloadableFeatureModels().filter(isNonTranslatorFeatureModel)
                 if selectedModelName.isEmpty || !available.contains(where: { $0.name == selectedModelName }) {
                     selectedModelName = available.first?.name ?? ""
@@ -4290,13 +4620,10 @@ struct ScamDetectorScreen: View {
         }
     }
 
-    private func buildAnalysisPrompt(content: String, hasImage: Bool) -> String {
+    private func buildAnalysisRequest(content: String, hasImage: Bool) -> (systemPrompt: String, prompt: String) {
         if hasImage && !content.isEmpty {
-            return """
+            let systemPrompt = """
             You are a scam detection expert. Analyze BOTH the provided image AND the text content below for potential scams, fraud, phishing attempts, or suspicious activity.
-
-            **Text content to analyze:**
-            \(content)
 
             **Instructions:**
             - Carefully examine the image for any suspicious elements, fake logos, misleading graphics, or scam indicators
@@ -4315,10 +4642,15 @@ struct ScamDetectorScreen: View {
 
             Be thorough and specific in your analysis. If you detect a scam, clearly state it. If it appears legitimate, explain why.
             """
+            let prompt = """
+            **Text content to analyze:**
+            \(content)
+            """
+            return (systemPrompt, prompt)
         }
 
         if hasImage {
-            return """
+            let systemPrompt = """
             You are a scam detection expert. Analyze the provided image for potential scams, fraud, phishing attempts, or suspicious activity.
 
             **Instructions:**
@@ -4335,15 +4667,13 @@ struct ScamDetectorScreen: View {
 
             Be thorough and specific in your analysis. If you detect a scam, clearly state it. If it appears legitimate, explain why.
             """
+            return (systemPrompt, "Analyze the provided image for potential scams, fraud, phishing attempts, or suspicious activity.")
         }
 
-        return """
+        let systemPrompt = """
         You are a scam detection expert. Analyze the following content for potential scams, fraud, phishing attempts, or suspicious activity.
 
         IMPORTANT: Respond in the same language as the input content. Match the language of the content in the image.
-
-        Content to analyze:
-        \(content)
 
         Please provide a comprehensive analysis covering:
         1. **Risk Level**: Low, Medium, High, or Critical
@@ -4354,6 +4684,11 @@ struct ScamDetectorScreen: View {
 
         Be thorough and specific in your analysis. If you detect a scam, clearly state it. If it appears legitimate, explain why.
         """
+        let prompt = """
+        Content to analyze:
+        \(content)
+        """
+        return (systemPrompt, prompt)
     }
 
     private func detectFirstURL(in text: String) -> String? {
@@ -4403,7 +4738,7 @@ struct ScamDetectorScreen: View {
         isLoading = true
         defer { isLoading = false }
 
-        let modelContextCap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+        let modelContextCap = contextLimitForFeatureModel(model)
         let effectiveContext = min(max(1, Int(maxTokens)), modelContextCap)
         let shouldReload = force
             || llm.currentlyLoadedModel != model.name
@@ -4413,7 +4748,8 @@ struct ScamDetectorScreen: View {
         llm.contextWindow = effectiveContext
         llm.enableVision = enableVision
         llm.enableAudio = false
-        llm.enableThinking = enableThinking
+        let isGranite42 = selectedModelName.lowercased().contains("granite-4.2") || selectedModelName.lowercased().contains("granite 4.2")
+        llm.enableThinking = isGranite42 ? false : enableThinking
 
         do {
             if shouldReload {
@@ -4470,9 +4806,13 @@ struct ScamDetectorScreen: View {
 
             do {
                 let hasImage = selectedImageURL != nil && enableVision
-                let prompt = buildAnalysisPrompt(content: contentToAnalyze, hasImage: hasImage)
+                let analysisRequest = buildAnalysisRequest(content: contentToAnalyze, hasImage: hasImage)
                 let effectiveImageURL = enableVision ? selectedImageURL : nil
-                try await llm.generate(prompt: prompt, imageURL: effectiveImageURL) { text, _, _ in
+                try await llm.generate(
+                    prompt: analysisRequest.prompt,
+                    imageURL: effectiveImageURL,
+                    systemPrompt: analysisRequest.systemPrompt
+                ) { text, _, _ in
                     Task { @MainActor in
                         outputText = sanitizeModelOutputText(text)
                     }
@@ -4621,7 +4961,7 @@ private struct WorkspaceFilesSheet: View {
             }
             .navigationTitle("Files")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(settings.localized("done")) { dismiss() }
@@ -4680,7 +5020,7 @@ struct VibeCoderScreen: View {
             return val
         }
         if let model = selectedFeatureModel(named: modelName) {
-            let cap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+            let cap = contextLimitForFeatureModel(model)
             return Double(min(4096, cap))
         }
         return 4096
@@ -4743,8 +5083,21 @@ struct VibeCoderScreen: View {
         return false
     }
 
+    private var isSelectedModelMuseGlimmer: Bool {
+        selectedFeatureModel(named: selectedModelName)?.chatTemplateFamily == .museGlimmer
+    }
+
+    private var isSelectedModelGranite42: Bool {
+        let name = selectedModelName.lowercased()
+        return name.contains("granite-4.2") || name.contains("granite 4.2")
+    }
+
+    private var effectiveEnableThinking: Bool {
+        enableThinking && !isSelectedModelMuseGlimmer && !isSelectedModelGranite42
+    }
+
     private var preferThinkingWhileStreaming: Bool {
-        enableThinking
+        effectiveEnableThinking
             && (selectedFeatureModel(named: selectedModelName)?.supportsThinking == true)
             && supportsUnmarkedStreamingThinkingHeuristic(forModelNamed: selectedModelName)
     }
@@ -4842,359 +5195,387 @@ struct VibeCoderScreen: View {
         )
     }
 
+    private func scrollToLast(proxy: ScrollViewProxy) {
+        guard let last = activeMessages.last else { return }
+        withAnimation(.linear(duration: 0.08)) {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
+    }
+
+    private func scheduleAutosave() {
+        debouncedAutosaveTask?.cancel()
+        debouncedAutosaveTask = Task {
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            if Task.isCancelled { return }
+            await MainActor.run {
+                saveCurrentFile(silent: true)
+            }
+        }
+    }
+
+    private func stopPreviewServer() {
+        Task { await LocalHTMLPreviewServer.shared.stop() }
+    }
+
+    @ViewBuilder
+    private var emptyModelView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "curlybraces.square")
+                .font(.system(size: 48, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(settings.localized("scam_detector_load_model"))
+                .font(.title3.weight(.bold))
+            Text(settings.localized("scam_detector_load_model_desc"))
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            Button {
+                showSettings = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text(settings.localized("feature_settings_title"))
+                    Spacer()
+                }
+                .frame(height: 50)
+                .contentShape(Rectangle())
+            }
+            .frame(maxWidth: 260)
+            .liquidGlassPrimaryButton(cornerRadius: 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var noFolderView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 48, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Text(settings.localized("vibe_coder_select_folder_title"))
+                .font(.title3.weight(.bold))
+                .multilineTextAlignment(.center)
+
+            Text(settings.localized("vibe_coder_select_folder_desc"))
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Button {
+                showWorkspaceFolderPicker = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text(settings.localized("vibe_coder_open_folder"))
+                    Spacer()
+                }
+                .frame(height: 50)
+                .contentShape(Rectangle())
+            }
+            .frame(maxWidth: 260)
+            .liquidGlassPrimaryButton(cornerRadius: 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var workspaceView: some View {
+        VStack(spacing: 12) {
+            GeometryReader { _ in
+                let isLandscape = UIScreen.main.bounds.width > UIScreen.main.bounds.height
+
+                let chatPanel = AnyView(
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text(settings.localized("vibe_coder_ai_chat"))
+                                .font(.headline)
+                            Spacer()
+
+                            ZStack {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.18), lineWidth: 2)
+                                Circle()
+                                    .trim(from: 0, to: contextUsageFractionDisplay)
+                                    .stroke(
+                                        contextUsageFractionRaw < 0.90 ? ApolloPalette.accentStrong : ApolloPalette.warning,
+                                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                                    )
+                                    .rotationEffect(.degrees(-90))
+
+                                Text(contextUsageFractionRaw < 0.995 ? contextUsageLabel : "!")
+                                    .font(.system(size: 8, weight: .bold, design: .rounded))
+                            }
+                            .frame(width: 28, height: 28)
+                            .accessibilityLabel("Context usage \(contextUsageLabel)")
+
+                            Button {
+                                clearActiveChat()
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                            }
+                            .disabled(activeMessages.isEmpty || isGenerating)
+
+                            Button {
+                                createNewChatSession()
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                            }
+                            .disabled(isGenerating)
+                        }
+                        .padding(.horizontal)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(chatSessions) { session in
+                                    VibeChatSessionChip(
+                                        title: session.title,
+                                        isSelected: session.id == activeChatSessionId,
+                                        canDelete: chatSessions.count > 1 && !isGenerating,
+                                        onSelect: { activeChatSessionId = session.id },
+                                        onDelete: { pendingDeleteChatId = session.id }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(activeMessages) { message in
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: 8) {
+                                                Text(message.role == "user" ? settings.localized("vibe_coder_message_you") : settings.localized("vibe_coder_message_ai"))
+                                                    .font(.caption.weight(.semibold))
+                                                    .foregroundStyle(.white.opacity(0.65))
+                                                Spacer()
+
+                                            }
+                                            if message.role == "user" {
+                                                Text(message.text)
+                                                    .textSelection(.enabled)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .padding(8)
+                                                    .background(.ultraThinMaterial)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                            } else {
+                                                ThinkingAwareResultContent(
+                                                    content: message.text,
+                                                    isGenerating: isGenerating && message.id == activeMessages.last?.id,
+                                                    preferThinkingWhileStreaming: preferThinkingWhileStreaming
+                                                )
+                                                .padding(8)
+                                                .background(.ultraThinMaterial)
+                                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                            }
+                                        }
+                                        .id(message.id)
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.top, 6)
+                            }
+                            .frame(minHeight: 160)
+                            .onChange(of: activeMessages.count) { _, _ in
+                                scrollToLast(proxy: proxy)
+                            }
+                            .onChange(of: streamTick) { _, _ in
+                                scrollToLast(proxy: proxy)
+                            }
+                        }
+
+                        HStack(spacing: 10) {
+                            TextField(
+                                hasFileSession ? settings.localized("vibe_coder_ask_ai_edit") : settings.localized("vibe_coder_create_open_file_hint"),
+                                text: $chatInput,
+                                axis: .vertical
+                            )
+                            .lineLimit(1...5)
+                            .focused($focusedField, equals: .chat)
+                            .disabled(!hasFileSession || isGenerating || isLoading)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 12)
+                            .background(Color.white.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                            Button {
+                                if isGenerating {
+                                    stopGeneration()
+                                } else {
+                                    sendChat()
+                                }
+                            } label: {
+                                if isLoading {
+                                    ProgressView()
+                                        .tint(.white)
+                                        .scaleEffect(0.85)
+                                        .frame(width: 44, height: 44)
+                                } else {
+                                    Image(systemName: sendButtonIconName)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .frame(width: 44, height: 44)
+                                }
+                            }
+                            .foregroundStyle(.white)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.08))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            )
+                            .disabled(isSendButtonDisabled)
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                    }
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    )
+                    .padding(.horizontal)
+                )
+
+                let editorPanel = AnyView(
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(currentFileName ?? settings.localized("vibe_coder_open_or_create_file"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.72))
+                            Spacer()
+
+                            Button {
+                                showWorkspaceFolderPicker = true
+                            } label: {
+                                Image(systemName: "folder")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                            }
+
+                            Button {
+                                showCreateFileDialog = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                            }
+
+                            Button {
+                                #if canImport(UIKit)
+                                UIPasteboard.general.string = generatedCode
+                                #endif
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                            }
+                            .disabled(generatedCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                            Button {
+                                saveCurrentFile()
+                            } label: {
+                                Image(systemName: "square.and.arrow.down")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                            }
+                            .disabled(!hasFileSession)
+
+                            if isHTMLFile {
+                                Button {
+                                    openHTMLPreviewInSafari()
+                                } label: {
+                                    Image(systemName: "safari")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .frame(width: 36, height: 36)
+                                }
+                                .disabled(generatedCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(workspaceFiles, id: \.path) { url in
+                                    VibeFileChip(
+                                        title: url.lastPathComponent,
+                                        isSelected: url == currentFileURL,
+                                        canDelete: !isGenerating,
+                                        onSelect: { openFile(url) },
+                                        onDelete: { pendingDeleteFileURL = url }
+                                    )
+                                }
+                            }
+                        }
+
+                        TextEditor(text: $generatedCode)
+                            .font(.system(.body, design: .monospaced))
+                            .focused($focusedField, equals: .editor)
+                            .frame(minHeight: 220)
+                            .padding(8)
+                            .scrollContentBackground(.hidden)
+                            .background(Color.white.opacity(0.02))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    )
+                    .padding(.horizontal)
+                )
+
+                Group {
+                    if isLandscape {
+                        HStack(spacing: 12) {
+                            editorPanel
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            chatPanel
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            chatPanel
+                            editorPanel
+                        }
+                    }
+                }
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .font(.caption)
+                    .padding(.horizontal)
+            }
+        }
+    }
+
     var body: some View {
         Group {
             if selectedModelName.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "curlybraces.square")
-                        .font(.system(size: 48, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Text(settings.localized("scam_detector_load_model"))
-                        .font(.title3.weight(.bold))
-                    Text(settings.localized("scam_detector_load_model_desc"))
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                    Button {
-                        showSettings = true
-                    } label: {
-                        HStack {
-                            Spacer()
-                            Text(settings.localized("feature_settings_title"))
-                            Spacer()
-                        }
-                        .frame(height: 50)
-                        .contentShape(Rectangle())
-                    }
-                    .frame(maxWidth: 260)
-                    .liquidGlassPrimaryButton(cornerRadius: 12)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                emptyModelView
+            } else if !hasWorkspaceFolder {
+                noFolderView
             } else {
-                if !hasWorkspaceFolder {
-                    VStack(spacing: 12) {
-                        Image(systemName: "folder.fill")
-                            .font(.system(size: 48, weight: .semibold))
-                            .foregroundStyle(.secondary)
-
-                        Text(settings.localized("vibe_coder_select_folder_title"))
-                            .font(.title3.weight(.bold))
-                            .multilineTextAlignment(.center)
-
-                        Text(settings.localized("vibe_coder_select_folder_desc"))
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-
-                        Button {
-                            showWorkspaceFolderPicker = true
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Text(settings.localized("vibe_coder_open_folder"))
-                                Spacer()
-                            }
-                            .frame(height: 50)
-                            .contentShape(Rectangle())
-                        }
-                        .frame(maxWidth: 260)
-                        .liquidGlassPrimaryButton(cornerRadius: 12)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    VStack(spacing: 12) {
-                        GeometryReader { _ in
-                            let isLandscape = UIScreen.main.bounds.width > UIScreen.main.bounds.height
-
-                            let chatPanel = AnyView(
-                                VStack(alignment: .leading, spacing: 10) {
-                                    HStack {
-                                        Text(settings.localized("vibe_coder_ai_chat"))
-                                            .font(.headline)
-                                        Spacer()
-
-                                        ZStack {
-                                            Circle()
-                                                .stroke(Color.white.opacity(0.18), lineWidth: 2)
-                                            Circle()
-                                                .trim(from: 0, to: contextUsageFractionDisplay)
-                                                .stroke(
-                                                    contextUsageFractionRaw < 0.90 ? ApolloPalette.accentStrong : ApolloPalette.warning,
-                                                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
-                                                )
-                                                .rotationEffect(.degrees(-90))
-
-                                            Text(contextUsageFractionRaw < 0.995 ? contextUsageLabel : "!")
-                                                .font(.system(size: 8, weight: .bold, design: .rounded))
-                                        }
-                                        .frame(width: 28, height: 28)
-                                        .accessibilityLabel("Context usage \(contextUsageLabel)")
-
-                                        Button {
-                                            clearActiveChat()
-                                        } label: {
-                                            Image(systemName: "trash")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .frame(width: 36, height: 36)
-                                        }
-                                        .disabled(activeMessages.isEmpty || isGenerating)
-
-                                        Button {
-                                            createNewChatSession()
-                                        } label: {
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .frame(width: 36, height: 36)
-                                        }
-                                        .disabled(isGenerating)
-                                    }
-                                    .padding(.horizontal)
-
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 8) {
-                                            ForEach(chatSessions) { session in
-                                                VibeChatSessionChip(
-                                                    title: session.title,
-                                                    isSelected: session.id == activeChatSessionId,
-                                                    canDelete: chatSessions.count > 1 && !isGenerating,
-                                                    onSelect: { activeChatSessionId = session.id },
-                                                    onDelete: { pendingDeleteChatId = session.id }
-                                                )
-                                            }
-                                        }
-                                        .padding(.horizontal)
-                                    }
-
-                                    ScrollViewReader { proxy in
-                                        ScrollView {
-                                            VStack(alignment: .leading, spacing: 8) {
-                                                ForEach(activeMessages) { message in
-                                                    VStack(alignment: .leading, spacing: 4) {
-                                                        HStack(spacing: 8) {
-                                                            Text(message.role == "user" ? settings.localized("vibe_coder_message_you") : settings.localized("vibe_coder_message_ai"))
-                                                                .font(.caption.weight(.semibold))
-                                                                .foregroundStyle(.white.opacity(0.65))
-                                                            Spacer()
-
-                                                        }
-                                                        if message.role == "user" {
-                                                            Text(message.text)
-                                                                .textSelection(.enabled)
-                                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                                .padding(8)
-                                                                .background(.ultraThinMaterial)
-                                                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                        } else {
-                                                            ThinkingAwareResultContent(
-                                                                content: message.text,
-                                                                isGenerating: isGenerating && message.id == activeMessages.last?.id,
-                                                                preferThinkingWhileStreaming: preferThinkingWhileStreaming
-                                                            )
-                                                            .padding(8)
-                                                            .background(.ultraThinMaterial)
-                                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                        }
-                                                    }
-                                                    .id(message.id)
-                                                }
-                                            }
-                                            .padding(.horizontal)
-                                            .padding(.top, 6)
-                                        }
-                                        .frame(minHeight: 160)
-                                        .onChange(of: activeMessages.count) { _, _ in
-                                            if let last = activeMessages.last {
-                                                withAnimation(.linear(duration: 0.08)) {
-                                                    proxy.scrollTo(last.id, anchor: .bottom)
-                                                }
-                                            }
-                                        }
-                                        .onChange(of: streamTick) { _, _ in
-                                            if let last = activeMessages.last {
-                                                proxy.scrollTo(last.id, anchor: .bottom)
-                                            }
-                                        }
-                                    }
-
-                                    HStack(spacing: 10) {
-                                        TextField(
-                                            hasFileSession ? settings.localized("vibe_coder_ask_ai_edit") : settings.localized("vibe_coder_create_open_file_hint"),
-                                            text: $chatInput,
-                                            axis: .vertical
-                                        )
-                                        .lineLimit(1...5)
-                                        .focused($focusedField, equals: .chat)
-                                        .disabled(!hasFileSession || isGenerating || isLoading)
-                                        .padding(.vertical, 10)
-                                        .padding(.horizontal, 12)
-                                        .background(Color.white.opacity(0.05))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                                        Button {
-                                            if isGenerating {
-                                                stopGeneration()
-                                            } else {
-                                                sendChat()
-                                            }
-                                        } label: {
-                                            if isLoading {
-                                                ProgressView()
-                                                    .tint(.white)
-                                                    .scaleEffect(0.85)
-                                                    .frame(width: 44, height: 44)
-                                            } else {
-                                                Image(systemName: sendButtonIconName)
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .frame(width: 44, height: 44)
-                                            }
-                                        }
-                                        .foregroundStyle(.white)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.white.opacity(0.08))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                                        )
-                                        .disabled(isSendButtonDisabled)
-                                    }
-                                    .padding(.horizontal)
-                                    .padding(.bottom, 8)
-                                }
-                                .padding(.vertical, 10)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                                )
-                                .padding(.horizontal)
-                            )
-
-                            let editorPanel = AnyView(
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text(currentFileName ?? settings.localized("vibe_coder_open_or_create_file"))
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(.white.opacity(0.72))
-                                        Spacer()
-
-                                        Button {
-                                            showWorkspaceFolderPicker = true
-                                        } label: {
-                                            Image(systemName: "folder")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .frame(width: 36, height: 36)
-                                        }
-
-                                        Button {
-                                            showCreateFileDialog = true
-                                        } label: {
-                                            Image(systemName: "plus")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .frame(width: 36, height: 36)
-                                        }
-
-                                        Button {
-                                            #if canImport(UIKit)
-                                            UIPasteboard.general.string = generatedCode
-                                            #endif
-                                        } label: {
-                                            Image(systemName: "doc.on.doc")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .frame(width: 36, height: 36)
-                                        }
-                                        .disabled(generatedCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                                        Button {
-                                            saveCurrentFile()
-                                        } label: {
-                                            Image(systemName: "square.and.arrow.down")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .frame(width: 36, height: 36)
-                                        }
-                                        .disabled(!hasFileSession)
-
-                                        if isHTMLFile {
-                                            Button {
-                                                openHTMLPreviewInSafari()
-                                            } label: {
-                                                Image(systemName: "safari")
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .frame(width: 36, height: 36)
-                                            }
-                                            .disabled(generatedCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                        }
-                                    }
-
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 8) {
-                                            ForEach(workspaceFiles, id: \.path) { url in
-                                                VibeFileChip(
-                                                    title: url.lastPathComponent,
-                                                    isSelected: url == currentFileURL,
-                                                    canDelete: !isGenerating,
-                                                    onSelect: { openFile(url) },
-                                                    onDelete: { pendingDeleteFileURL = url }
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    TextEditor(text: $generatedCode)
-                                        .font(.system(.body, design: .monospaced))
-                                        .focused($focusedField, equals: .editor)
-                                        .frame(minHeight: 220)
-                                        .padding(8)
-                                        .scrollContentBackground(.hidden)
-                                        .background(Color.white.opacity(0.02))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                }
-                                .padding(.horizontal)
-                                .padding(.vertical, 10)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                                )
-                                .padding(.horizontal)
-                            )
-
-                            Group {
-                                if isLandscape {
-                                    HStack(spacing: 12) {
-                                        editorPanel
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                        chatPanel
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    }
-                                } else {
-                                    VStack(spacing: 12) {
-                                        chatPanel
-                                        editorPanel
-                                    }
-                                }
-                            }
-                        }
-
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .foregroundColor(.red)
-                                .font(.caption)
-                                .padding(.horizontal)
-                        }
-                    }
-                }
+                workspaceView
             }
         }
         .navigationTitle(settings.localized("vibe_coder_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -5205,7 +5586,7 @@ struct VibeCoderScreen: View {
                 }
             }
         }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -5220,7 +5601,7 @@ struct VibeCoderScreen: View {
                 Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             FeatureModelSettingsSheet(
                 selectedModelName: $selectedModelName,
                 maxTokens: $maxTokens,
@@ -5236,7 +5617,8 @@ struct VibeCoderScreen: View {
                 writingMode: nil,
                 modelFilter: isNonTranslatorFeatureModel,
                 onLoad: { await ensureModelLoaded(force: false) },
-                onUnload: { llm.unloadModel() }
+                onUnload: { llm.unloadModel() },
+                showsThinkingToggle: !isSelectedModelMuseGlimmer
             )
             .environmentObject(settings)
         }
@@ -5244,7 +5626,7 @@ struct VibeCoderScreen: View {
             restoreChatSessionsFromStorage()
 
             Task {
-                await syncRunAnywhereModelDiscovery()
+                await refreshDownloadedModelStatus()
                 let available = downloadableFeatureModels().filter(isNonTranslatorFeatureModel)
                 let hasSelectedModelName = !selectedModelName.isEmpty
                 let selectedModelExists = available.contains { model in
@@ -5293,14 +5675,7 @@ struct VibeCoderScreen: View {
         }
         .onChange(of: generatedCode) { _, _ in
             guard hasFileSession, !isGenerating else { return }
-            debouncedAutosaveTask?.cancel()
-            debouncedAutosaveTask = Task {
-                try? await Task.sleep(nanoseconds: 450_000_000)
-                if Task.isCancelled { return }
-                await MainActor.run {
-                    saveCurrentFile(silent: true)
-                }
-            }
+            scheduleAutosave()
         }
         .fileImporter(
             isPresented: $showWorkspaceFolderPicker,
@@ -5339,7 +5714,9 @@ struct VibeCoderScreen: View {
             debouncedAutosaveTask?.cancel()
             debouncedAutosaveTask = nil
             llm.unloadModel()
-            Task { await LocalHTMLPreviewServer.shared.stop() }
+        }
+        .onDisappear {
+            stopPreviewServer()
         }
     }
 
@@ -5621,7 +5998,7 @@ struct VibeCoderScreen: View {
         isLoading = true
         defer { isLoading = false }
 
-        let modelContextCap = model.contextWindowSize > 0 ? model.contextWindowSize : 4096
+        let modelContextCap = contextLimitForFeatureModel(model)
         let effectiveContext = min(max(1, Int(maxTokens)), modelContextCap)
         let shouldReload = force
             || llm.currentlyLoadedModel != model.name
@@ -5631,7 +6008,7 @@ struct VibeCoderScreen: View {
         llm.contextWindow = effectiveContext
         llm.enableVision = false
         llm.enableAudio = false
-        llm.enableThinking = enableThinking
+        llm.enableThinking = effectiveEnableThinking
 
         do {
             if shouldReload {
@@ -5688,6 +6065,11 @@ struct VibeCoderScreen: View {
             do {
                 // Build the file-aware base prompt for the current request.
                 let filePrompt = buildFileAwareEditPrompt(trimmedPrompt)
+
+                // Sync VibeCode's thinking toggle to the backend before building prompt & generating
+                let savedThinking = llm.enableThinking
+                llm.enableThinking = effectiveEnableThinking
+                defer { llm.enableThinking = savedThinking }
 
                 // Wrap with full conversation history so the model remembers prior turns.
                 let prompt = buildVibeCoderMultiTurnPrompt(
@@ -5748,10 +6130,17 @@ struct VibeCoderScreen: View {
     private func buildVibeCoderMultiTurnPrompt(currentFilePrompt: String, sessionId: UUID) -> String {
         let modelName = selectedModelName.lowercased()
         let modelSupportsThinking = selectedFeatureModel(named: selectedModelName)?.supportsThinking == true
-        let isGemma  = modelName.contains("gemma")
-        let isGemma4 = isGemma && (modelName.contains("gemma 4") || modelName.contains("gemma-4")) && !modelName.contains("translate")
-        let isLlama  = modelName.contains("llama") || modelName.contains("mistral")
+        let isGemma      = modelName.contains("gemma")
+        let isGemma4     = isGemma && (modelName.contains("gemma 4") || modelName.contains("gemma-4")) && !modelName.contains("translate")
+        let isLlama      = modelName.contains("llama") || modelName.contains("mistral")
+        let isLlama3     = isLlama && (modelName.contains("llama-3") || modelName.contains("llama 3") || modelName.contains("llama-3."))
         let isHarmonyModel = modelName.contains("gpt-oss") || modelName.contains("gpt_oss")
+        let isMuseGlimmer = selectedFeatureModel(named: selectedModelName)?.chatTemplateFamily == .museGlimmer
+        let isGranite42  = modelName.contains("granite-4.2") || modelName.contains("granite 4.2")
+        let isGranite    = modelName.contains("granite") && !isGranite42
+        let isPhi4       = modelName.contains("phi-4") || modelName.contains("phi 4") || modelName.contains("phi4")
+        // LFM (Liquid AI) and similar ChatML-style models
+        let isChatML     = modelName.contains("lfm") || modelName.contains("liquid")
 
         // 1. Get history (exclude placeholder turns)
         var allMessages: [VibeChatMessage] = []
@@ -5816,13 +6205,58 @@ struct VibeCoderScreen: View {
             parts.append(contentsOf: harmonyParts)
             return parts.joined()
         }
+
+        if isMuseGlimmer {
+            let dateFormatter = DateFormatter()
+            dateFormatter.calendar = Calendar(identifier: .gregorian)
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+
+            parts.append("<|begin_of_text|>")
+            let validRecipients = llm.enableThinking ? "\"self\", \"user\"" : "\"user\""
+            parts.append("<|start|>system<|message|>\(systemPrompt)\nKnowledge cutoff: 2026-01-04.\nCurrent date: \(dateFormatter.string(from: Date())).\n\nReasoning strength: high.\n\n# Valid recipients: \(validRecipients).<|eot|>")
+
+            for msg in truncatedHistory {
+                let rawText = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let content: String
+                if msg.role == "user" {
+                    content = rawText
+                } else {
+                    let answer = getDisplayContentWithoutThinking(rawText)
+                    content = answer.isEmpty ? rawText : answer
+                }
+                guard !content.isEmpty else { continue }
+
+                if msg.role == "user" {
+                    parts.append("<|start|>user<|message|>\(content)<|eot|>")
+                } else {
+                    parts.append("<|start|>assistant to=user<|message|>\(content)<|eot|>")
+                }
+            }
+
+            parts.append("<|start|>user<|message|>\(currentFilePrompt)<|eot|>")
+            parts.append(llm.enableThinking
+                ? "<|start|>assistant"
+                : "<|start|>assistant to=user<|message|>")
+            return parts.joined()
+        }
         
-        if isGemma4 {
+        if isPhi4 {
+            parts.append("<|system|>\n\(systemPrompt)<|end|>")
+        } else if isGemma4 {
             parts.append("<|turn>system\n\(systemPrompt)<turn|>")
         } else if isGemma {
             parts.append("<start_of_turn>system\n\(systemPrompt)<end_of_turn>")
+        } else if isLlama3 {
+            parts.append("<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n\(systemPrompt)<|eot_id|>")
         } else if isLlama {
             parts.append("<<SYS>>\n\(systemPrompt)\n<</SYS>>")
+        } else if isGranite42 {
+            parts.append("<|im_start|>system\n\(systemPrompt)<|im_end|>")
+        } else if isGranite {
+            parts.append("<|start_of_role|>system<|end_of_role|>\(systemPrompt)<|end_of_text|>")
+        } else if isChatML {
+            parts.append("<|startoftext|><|im_start|>system\n\(systemPrompt)<|im_end|>")
         } else {
             parts.append("System: \(systemPrompt)")
         }
@@ -5840,18 +6274,34 @@ struct VibeCoderScreen: View {
             }
             guard !content.isEmpty else { continue }
 
-            if isGemma4 {
+            if isPhi4 {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|\(role)|>\n\(content)<|end|>")
+            } else if isGemma4 {
                 let role = (msg.role == "user") ? "user" : "model"
                 parts.append("<|turn>\(role)\n\(content)<turn|>")
             } else if isGemma {
                 let role = (msg.role == "user") ? "user" : "model"
                 parts.append("<start_of_turn>\(role)\n\(content)<end_of_turn>")
+            } else if isLlama3 {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|start_header_id|>\(role)<|end_header_id|>\n\n\(content)<|eot_id|>")
             } else if isLlama {
                 if msg.role == "user" {
                     parts.append("[INST] \(content) [/INST]")
                 } else {
                     parts.append(content)
                 }
+            } else if isGranite42 {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                let prefix = (role == "assistant") ? "<think></think>" : ""
+                parts.append("<|im_start|>\(role)\n\(prefix)\(content)<|im_end|>")
+            } else if isGranite {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|start_of_role|>\(role)<|end_of_role|>\(content)<|end_of_text|>")
+            } else if isChatML {
+                let role = (msg.role == "user") ? "user" : "assistant"
+                parts.append("<|im_start|>\(role)\n\(content)<|im_end|>")
             } else {
                 let prefix = (msg.role == "user") ? "User" : "Assistant"
                 parts.append("\(prefix): \(content)")
@@ -5859,14 +6309,29 @@ struct VibeCoderScreen: View {
         }
 
         // 4. Final Open Turn
-        if isGemma4 {
+        if isPhi4 {
+            parts.append("<|user|>\n\(currentFilePrompt)<|end|>")
+            parts.append("<|assistant|>\n")
+        } else if isGemma4 {
             parts.append("<|turn>user\n\(currentFilePrompt)<turn|>")
             parts.append("<|turn>model\n")
         } else if isGemma {
             parts.append("<start_of_turn>user\n\(currentFilePrompt)<end_of_turn>")
             parts.append("<start_of_turn>model\n")
+        } else if isLlama3 {
+            parts.append("<|start_header_id|>user<|end_header_id|>\n\n\(currentFilePrompt)<|eot_id|>")
+            parts.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
         } else if isLlama {
             parts.append("[INST] \(currentFilePrompt) [/INST]")
+        } else if isGranite42 {
+            parts.append("<|im_start|>user\n\(currentFilePrompt)<|im_end|>")
+            parts.append("<|im_start|>assistant\n<think></think>")
+        } else if isGranite {
+            parts.append("<|start_of_role|>user<|end_of_role|>\(currentFilePrompt)<|end_of_text|>")
+            parts.append("<|start_of_role|>assistant<|end_of_role|>")
+        } else if isChatML {
+            parts.append("<|im_start|>user\n\(currentFilePrompt)<|im_end|>")
+            parts.append("<|im_start|>assistant\n")
         } else {
             parts.append("User: \(currentFilePrompt)")
             parts.append("Assistant:")
@@ -6074,8 +6539,7 @@ struct ImageGeneratorScreen: View {
         .navigationTitle(settings.localized("image_generator_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -6088,7 +6552,7 @@ struct ImageGeneratorScreen: View {
                 Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             ImageGeneratorSettingsSheet(
                 availableModels: availableModels,
                 selectedModelId: $selectedModelId,
@@ -6736,11 +7200,386 @@ private struct ImageGeneratorSettingsSheet: View {
                 }
                 .padding()
             }
+            .apolloScreenBackground()
             .navigationTitle(settings.localized("feature_settings_title"))
             .navigationBarTitleDisplayMode(.inline)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(settings.localized("close")) { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+private struct GeneratedMusicTrack: Identifiable {
+    let id = UUID()
+    let prompt: String
+    let requestedDurationSeconds: Int
+    let url: URL
+}
+
+public struct MusicGeneratorScreen: View {
+    @EnvironmentObject private var modelManager: ModelManager
+    @EnvironmentObject var settings: AppSettings
+    var onNavigateBack: (() -> Void)?
+    var onNavigateToModels: (() -> Void)?
+
+    @AppStorage("feature_music_model_name") private var selectedModelName: String = ""
+    @State private var maxTokens: Double = 2048
+    @State private var enableThinking: Bool = false
+    @State private var enableVision: Bool = false
+    @State private var prompt: String = ""
+    @State private var isGenerating: Bool = false
+    @State private var generatedTracks: [GeneratedMusicTrack] = []
+    @State private var durationSeconds: Double = 10.0
+    @State private var showSettings: Bool = false
+    @State private var isLoading: Bool = false
+    @State private var errorMessage: String? = nil
+
+    @ObservedObject private var musicBackend = MusicGeneratorBackend.shared
+
+    private var isCurrentModelLoaded: Bool {
+        musicBackend.isLoaded && musicBackend.loadedModelName == selectedModelName
+    }
+
+    private let presetPrompts = [
+        "Upbeat 80s Synthwave synth bass & drums",
+        "Ambient relaxing acoustic piano & warm pads",
+        "Epic cinematic trailer orchestral battle motif",
+        "Chill Lo-Fi hip hop beat with rain sounds",
+        "Energetic rock guitar riff with upbeat rhythm",
+        "Smooth jazz saxophone melody with acoustic bass"
+    ]
+
+    public init(onNavigateBack: (() -> Void)? = nil, onNavigateToModels: (() -> Void)? = nil) {
+        self.onNavigateBack = onNavigateBack
+        self.onNavigateToModels = onNavigateToModels
+    }
+
+    private func ensureModelLoaded(force _: Bool = false) async -> Bool {
+        guard !selectedModelName.isEmpty else { return false }
+        guard let model = selectedFeatureModel(named: selectedModelName) else { return false }
+        let managerReportsDownloaded: Bool
+        if case .downloaded? = ModelManager.shared.modelStatuses[model.id] {
+            managerReportsDownloaded = true
+        } else {
+            managerReportsDownloaded = false
+        }
+        guard ModelData.isModelFullyAvailableLocally(model) || managerReportsDownloaded else { return false }
+        return await musicBackend.loadModel(modelName: selectedModelName)
+    }
+
+    public var body: some View {
+        Group {
+            if selectedModelName.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 48, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(settings.localized("music_generator_download_model"))
+                        .font(.title3.weight(.bold))
+                        .multilineTextAlignment(.center)
+                    Text(settings.localized("music_generator_download_model_desc"))
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Button {
+                        if let onNavigateToModels {
+                            onNavigateToModels()
+                        } else {
+                            showSettings = true
+                        }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "arrow.down.circle")
+                            Text(settings.localized("download_models"))
+                            Spacer()
+                        }
+                        .frame(height: 50)
+                        .contentShape(Rectangle())
+                    }
+                    .frame(maxWidth: 260)
+                    .liquidGlassPrimaryButton(cornerRadius: 12)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 0) {
+                    ScrollViewReader { scrollProxy in
+                        ScrollView {
+                            VStack(spacing: 14) {
+                            // Prompt Input Card
+                            promptInputCard
+
+                            // Duration Controls
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text(settings.localized("music_duration_label"))
+                                        .font(.subheadline)
+                                    Spacer()
+                                    Text("\(Int(durationSeconds))s")
+                                        .font(.subheadline)
+                                        .bold()
+                                        .foregroundStyle(ApolloPalette.accentStrong)
+                                }
+                                Slider(value: $durationSeconds, in: 1...600, step: 1)
+                                    .tint(ApolloPalette.accentStrong)
+                            }
+                            .padding(.horizontal)
+                            .padding(.vertical, 12)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                            )
+
+                            if let errorMessage {
+                                Text(errorMessage)
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                                    .padding(.horizontal)
+                            }
+
+                            ForEach(generatedTracks) { track in
+                                VStack(spacing: 14) {
+                                    HStack {
+                                        Image(systemName: "waveform.circle.fill")
+                                            .font(.title2)
+                                            .foregroundStyle(ApolloPalette.accentStrong)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(track.prompt)
+                                                .font(.subheadline)
+                                                .bold()
+                                                .lineLimit(1)
+                                            Text("\(track.requestedDurationSeconds)s Audio Clip")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        ShareLink(item: track.url) {
+                                            Image(systemName: "square.and.arrow.down")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .frame(width: 40, height: 40)
+                                        }
+                                        .featureActionIconButtonStyle()
+                                        .accessibilityLabel(settings.localized("save"))
+                                        AudioPlaybackButton(url: track.url)
+                                    }
+                                }
+                                .padding()
+                                .background(.ultraThinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                                )
+                                .id(track.id)
+                            }
+                            }
+                            .padding()
+                        }
+                        .onChange(of: generatedTracks.count) { _, _ in
+                            if let latest = generatedTracks.last {
+                                withAnimation { scrollProxy.scrollTo(latest.id, anchor: .bottom) }
+                            }
+                        }
+                    }
+
+                    if isGenerating {
+                        ProgressView(value: musicBackend.progress)
+                            .tint(ApolloPalette.accentStrong)
+                            .padding(.horizontal)
+                            .padding(.bottom, 10)
+                    }
+
+                    Button {
+                        generateMusic()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isGenerating || isLoading {
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(0.85)
+                            } else {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 13, weight: .bold))
+                            }
+                            Text(isLoading ? settings.localized("model_loading") : isGenerating ? settings.localized("generating_music") : settings.localized("generate_music"))
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                    }
+                    .foregroundStyle(.white)
+                    .liquidGlassPrimaryButton(cornerRadius: 12)
+                    .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isGenerating || isLoading)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                }
+            }
+        }
+        .navigationTitle(settings.localized("feature_music_generator"))
+        .navigationBarTitleDisplayMode(.inline)
+        .apolloScreenBackground()
+        .apolloNavigationBackground()
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    musicBackend.unloadModel()
+                    onNavigateBack?()
+                } label: {
+                    Image(systemName: "arrow.left")
+                }
+                .tint(.white)
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .tint(.white)
+            }
+        }
+        .apolloSheet(isPresented: $showSettings) {
+            FeatureModelSettingsSheet(
+                selectedModelName: $selectedModelName,
+                maxTokens: $maxTokens,
+                enableThinking: .constant(false),
+                enableVision: .constant(false),
+                enableAudio: nil,
+                isLoading: $isLoading,
+                errorMessage: $errorMessage,
+                supportsVisionToggle: false,
+                visionToggleTitleKey: "",
+                audioToggleTitleKey: nil,
+                visionAvailableCheck: nil,
+                writingMode: nil,
+                modelFilter: isMusicGenerationFeatureModel,
+                onLoad: {
+                    isLoading = true
+                    defer { isLoading = false }
+                    _ = await ensureModelLoaded(force: true)
+                },
+                onUnload: { musicBackend.unloadModel() },
+                showsThinkingToggle: false
+            )
+            .environmentObject(settings)
+        }
+        .onAppear {
+            Task {
+                await refreshDownloadedModelStatus()
+                let available = downloadableFeatureModels().filter(isMusicGenerationFeatureModel)
+                if selectedModelName.isEmpty || !available.contains(where: { $0.name == selectedModelName }) {
+                    selectedModelName = available.first?.name ?? ""
+                }
+            }
+        }
+        .onDisappear {
+            musicBackend.unloadModel()
+        }
+    }
+
+    @ViewBuilder
+    private var promptInputCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(settings.localized("music_prompt_label"))
+                .font(.headline)
+
+            ZStack(alignment: .topLeading) {
+                if prompt.isEmpty {
+                    Text(settings.localized("prompt_hint_music"))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                }
+                TextEditor(text: $prompt)
+                    .frame(minHeight: 120)
+                    .padding(8)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.white.opacity(0.02))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            Text(settings.localized("music_style_presets"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+
+            presetChipsView
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var presetChipsView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(presetPrompts, id: \.self) { preset in
+                    Button {
+                        prompt = preset
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "waveform")
+                            Text(preset)
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(.ultraThinMaterial))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func generateMusic() {
+        dismissKeyboard()
+        let requestedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !requestedPrompt.isEmpty else { return }
+        let requestedDuration = Int(durationSeconds)
+        Task {
+            if !isCurrentModelLoaded {
+                let success = await ensureModelLoaded(force: false)
+                guard success else { return }
+            }
+            await MainActor.run {
+                isGenerating = true
+                errorMessage = nil
+            }
+
+            let backend = MusicGeneratorBackend.shared
+            if let outputURL = await backend.generateMusic(
+                modelName: selectedModelName,
+                prompt: requestedPrompt,
+                durationSeconds: Double(requestedDuration)
+            ) {
+                await MainActor.run {
+                    generatedTracks.append(
+                        GeneratedMusicTrack(
+                            prompt: requestedPrompt,
+                            requestedDurationSeconds: requestedDuration,
+                            url: outputURL
+                        )
+                    )
+                    isGenerating = false
+                }
+            } else {
+                await MainActor.run {
+                    isGenerating = false
+                    errorMessage = backend.errorMessage ?? "Failed to generate music audio"
                 }
             }
         }

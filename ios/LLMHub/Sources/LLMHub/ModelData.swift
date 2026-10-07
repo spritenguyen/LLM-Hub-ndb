@@ -1,14 +1,15 @@
 import Foundation
-import RunAnywhere
 import ModelZoo
 
 public enum ModelFormat: String, Codable, Sendable {
     case task
     case litertlm
     case gguf
+    case tflite
     case onnx
     case coreml
     case drawthings
+    case platform
 }
 
 public enum DownloadState: Equatable, Sendable {
@@ -27,6 +28,7 @@ public enum ModelCategory: String, Codable, CaseIterable, Sendable {
     case videoGeneration = "Video Generation"
     case imageUpscale = "Image Upscale"
     case asr = "ASR Models"
+    case musicGeneration = "Music Generation"
 
     public var icon: String {
         switch self {
@@ -37,6 +39,7 @@ public enum ModelCategory: String, Codable, CaseIterable, Sendable {
         case .videoGeneration: return "video.fill"
         case .imageUpscale: return "sparkles"
         case .asr: return "waveform.and.mic"
+        case .musicGeneration: return "music.note"
         }
     }
 
@@ -49,6 +52,7 @@ public enum ModelCategory: String, Codable, CaseIterable, Sendable {
         case .videoGeneration: return "video_generation_models"
         case .imageUpscale: return "image_upscale_models"
         case .asr: return "asr_models"
+        case .musicGeneration: return "music_generation_models"
         }
     }
 
@@ -61,6 +65,7 @@ public enum ModelCategory: String, Codable, CaseIterable, Sendable {
         case .videoGeneration: return "video_generation_models_description"
         case .imageUpscale: return "image_upscale_models_description"
         case .asr: return "asr_models_description"
+        case .musicGeneration: return "music_generation_models_description"
         }
     }
 }
@@ -68,6 +73,11 @@ public enum ModelCategory: String, Codable, CaseIterable, Sendable {
 public struct ModelRequirements: Codable, Sendable {
     public let minRamGB: Int
     public let recommendedRamGB: Int
+}
+
+public enum ChatTemplateFamily: String, Codable, Sendable {
+    case automatic
+    case museGlimmer
 }
 
 public struct AIModel: Identifiable, Codable, Sendable {
@@ -82,10 +92,13 @@ public struct AIModel: Identifiable, Codable, Sendable {
     public let supportsAudio: Bool
     public let supportsThinking: Bool
     public let supportsGpu: Bool
+    public let supportsMtp: Bool
     public let requirements: ModelRequirements
     public let contextWindowSize: Int
     public let modelFormat: ModelFormat
     public let additionalFiles: [String]
+    public let promptTemplate: String?
+    public let chatTemplateFamily: ChatTemplateFamily
 
     public init(
         id: String? = nil,
@@ -99,10 +112,13 @@ public struct AIModel: Identifiable, Codable, Sendable {
         supportsAudio: Bool = false,
         supportsThinking: Bool = false,
         supportsGpu: Bool = true,
+        supportsMtp: Bool = true,
         requirements: ModelRequirements,
         contextWindowSize: Int = 2048,
         modelFormat: ModelFormat = .gguf,
-        additionalFiles: [String] = []
+        additionalFiles: [String] = [],
+        promptTemplate: String? = nil,
+        chatTemplateFamily: ChatTemplateFamily = .automatic
     ) {
         self.id = id ?? name.lowercased().replacingOccurrences(of: " ", with: "_")
         self.name = name
@@ -115,10 +131,35 @@ public struct AIModel: Identifiable, Codable, Sendable {
         self.supportsAudio = supportsAudio
         self.supportsThinking = supportsThinking
         self.supportsGpu = supportsGpu
+        self.supportsMtp = supportsMtp
         self.requirements = requirements
         self.contextWindowSize = contextWindowSize
         self.modelFormat = modelFormat
         self.additionalFiles = additionalFiles
+        self.promptTemplate = promptTemplate
+        self.chatTemplateFamily = chatTemplateFamily
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decode(String.self, forKey: .description)
+        url = try container.decode(String.self, forKey: .url)
+        category = try container.decode(ModelCategory.self, forKey: .category)
+        sizeBytes = try container.decode(Int64.self, forKey: .sizeBytes)
+        source = try container.decode(String.self, forKey: .source)
+        supportsVision = try container.decodeIfPresent(Bool.self, forKey: .supportsVision) ?? false
+        supportsAudio = try container.decodeIfPresent(Bool.self, forKey: .supportsAudio) ?? false
+        supportsThinking = try container.decodeIfPresent(Bool.self, forKey: .supportsThinking) ?? false
+        supportsGpu = try container.decodeIfPresent(Bool.self, forKey: .supportsGpu) ?? true
+        supportsMtp = try container.decodeIfPresent(Bool.self, forKey: .supportsMtp) ?? true
+        requirements = try container.decode(ModelRequirements.self, forKey: .requirements)
+        contextWindowSize = try container.decodeIfPresent(Int.self, forKey: .contextWindowSize) ?? 2048
+        modelFormat = try container.decodeIfPresent(ModelFormat.self, forKey: .modelFormat) ?? .gguf
+        additionalFiles = try container.decodeIfPresent([String].self, forKey: .additionalFiles) ?? []
+        promptTemplate = try container.decodeIfPresent(String.self, forKey: .promptTemplate)
+        chatTemplateFamily = try container.decodeIfPresent(ChatTemplateFamily.self, forKey: .chatTemplateFamily) ?? .automatic
     }
 
     public var sizeLabel: String {
@@ -131,7 +172,7 @@ public struct AIModel: Identifiable, Codable, Sendable {
     public var isGemma4LiteRTLM: Bool {
         modelFormat == .litertlm
             && supportsAudio
-            && name.lowercased().contains("gemma 4")
+            && (name.lowercased().contains("gemma 4") || name.lowercased().contains("gemma-4") || name.lowercased().contains("gemma_4"))
     }
 
     public var isWhisperModel: Bool {
@@ -159,6 +200,7 @@ public struct AIModel: Identifiable, Codable, Sendable {
     public var inferenceFramework: InferenceFramework {
         switch modelFormat {
         case .onnx: return .onnx
+        case .platform: return .foundationModels
         case .coreml: return .llamaCpp // CoreML models manage their own directories
         default: return .llamaCpp
         }
@@ -182,6 +224,13 @@ public struct AIModel: Identifiable, Codable, Sendable {
 
     public var isDrawThingsImageUpscale: Bool {
         modelFormat == .drawthings && category == .imageUpscale
+    }
+
+    /// Models that may be loaded by chat, Agent, and other LLM-backed features.
+    /// Dedicated media, ASR, embedding, and music models must stay in their own
+    /// feature pickers even when their files share a runtime or model format.
+    public var isLanguageModel: Bool {
+        category == .text || category == .multimodal
     }
 
     public var imageGenerationResolution: Int? {
@@ -304,9 +353,11 @@ public struct ModelData {
             url: fixedURL, category: model.category, sizeBytes: model.sizeBytes,
             source: model.source, supportsVision: model.supportsVision,
             supportsAudio: model.supportsAudio, supportsThinking: model.supportsThinking,
-            supportsGpu: model.supportsGpu, requirements: model.requirements,
+            supportsGpu: model.supportsGpu, supportsMtp: model.supportsMtp, requirements: model.requirements,
             contextWindowSize: model.contextWindowSize, modelFormat: model.modelFormat,
-            additionalFiles: fixedAdditional
+            additionalFiles: fixedAdditional,
+            promptTemplate: model.promptTemplate,
+            chatTemplateFamily: model.chatTemplateFamily
         )
     }
 
@@ -331,17 +382,30 @@ public struct ModelData {
 
         if model.source == "Custom" {
             let normalized = normalizeCustomModel(model)
-            guard FileManager.default.fileExists(atPath: normalized.url),
-                  !normalized.url.lowercased().contains("mmproj") else {
-                return false
+            // For locally-imported models, check the stored path directly
+            if !normalized.url.hasPrefix("http") {
+                guard FileManager.default.fileExists(atPath: normalized.url),
+                      !normalized.url.lowercased().contains("mmproj") else {
+                    return false
+                }
+                if normalized.supportsVision {
+                    return normalized.additionalFiles.contains {
+                        let lower = $0.lowercased()
+                        return lower.contains("mmproj") && FileManager.default.fileExists(atPath: $0)
+                    }
+                }
+                return true
             }
-            if normalized.supportsVision {
-                return normalized.additionalFiles.contains {
-                    let lower = $0.lowercased()
-                    return lower.contains("mmproj") && FileManager.default.fileExists(atPath: $0)
+            // For HF-downloaded custom models, check the legacy model storage directory.
+            if let dir = try? SimplifiedFileManager.shared.getModelFolderURL(
+                modelId: model.id, framework: model.inferenceFramework
+            ), FileManager.default.fileExists(atPath: dir.path) {
+                let status = localFileStatus(in: dir, for: model)
+                if status.allExist && status.totalBytes > 0 {
+                    return true
                 }
             }
-            return true
+            return false
         }
 
         if let runAnywhereDir = try? SimplifiedFileManager.shared.getModelFolderURL(
@@ -389,6 +453,172 @@ public struct ModelData {
 
 // AUTO-GENERATED from android ModelData.kt: GGUF + ONNX models only
 public static let models: [AIModel] = [
+    // MARK: - Muse Glimmer 30B Models (Meta via Unsloth GGUF)
+    AIModel(
+        name: "Muse Glimmer 30B (UD-IQ2_XXS)",
+        description: "Meta's 30B vision-language agent model. UD-IQ2_XXS quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 10.75 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-IQ2_XXS.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 10746373152,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 18, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (UD-IQ2_XS)",
+        description: "Meta's 30B vision-language agent model. UD-IQ2_XS quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 11.51 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-IQ2_XS.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 11513104416,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 18, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (UD-IQ2_M)",
+        description: "Meta's 30B vision-language agent model. UD-IQ2_M quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 12.26 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-IQ2_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 12255421472,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (UD-Q2_K_XL)",
+        description: "Meta's 30B vision-language agent model. UD-Q2_K_XL quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 12.44 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-Q2_K_XL.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 12444212256,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (UD-IQ3_XXS)",
+        description: "Meta's 30B vision-language agent model. UD-IQ3_XXS quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 13.13 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-IQ3_XXS.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 13130658848,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (UD-Q3_K_XL)",
+        description: "Meta's 30B vision-language agent model. UD-Q3_K_XL quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 13.36 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-Q3_K_XL.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 13360983072,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (UD-IQ3_M)",
+        description: "Meta's 30B vision-language agent model. UD-IQ3_M quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 14.12 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-IQ3_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 14122705696,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (UD-Q4_K_XL)",
+        description: "Meta's 30B vision-language agent model. UD-Q4_K_XL quantization. 131k context. Requires a separate Muse Glimmer Vision Projector for image input. 15.88 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/Muse-Glimmer-30B-UD-Q4_K_XL.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 15878222368,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsThinking: true,
+        supportsGpu: true,
+        supportsMtp: false,
+        requirements: ModelRequirements(minRamGB: 24, recommendedRamGB: 32),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [],
+        chatTemplateFamily: .museGlimmer
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (Vision Projector, BF16)",
+        description: "Vision Projector (mmproj) required to enable image input for Muse Glimmer 30B GGUF models. BF16 variant. 3.85 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/mmproj-Muse-Glimmer-30B-BF16.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 3849173728,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Muse Glimmer 30B (Vision Projector, Q8_0)",
+        description: "Vision Projector (mmproj) required to enable image input for Muse Glimmer 30B GGUF models. Q8_0 variant for a smaller download. 2.05 GB download.",
+        url: "https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF/resolve/faa5b025c584459c13febfa5c59883516710ae39/mmproj-Muse-Glimmer-30B-Q8_0.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 2051685088,
+        source: "Meta via Unsloth",
+        supportsVision: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+
     AIModel(
         name: "Llama-3.2 1B (IQ3_M)",
         description: "Llama 3.2 1B with IQ3_M quantization. Smallest size, great for low-memory devices. 128k context. (657MB)",
@@ -1379,6 +1609,734 @@ public static let models: [AIModel] = [
         modelFormat: .gguf,
         additionalFiles: []
     ),
+    // Granite 4.2 3B Models (IBM)
+    AIModel(
+        name: "Granite 4.2 3B (Q2_K)",
+        description: "IBM Granite 4.2 3B reasoning model with Q2_K quantization. Smallest size with built-in chain-of-thought thinking. 128k context. (1.46GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q2_K.gguf?download=true",
+        category: .text,
+        sizeBytes: 1455736352,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 2, recommendedRamGB: 3),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q3_K_S)",
+        description: "IBM Granite 4.2 3B reasoning model with Q3_K_S quantization. Balanced size with built-in chain-of-thought thinking. 128k context. (1.68GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q3_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 1677207072,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q3_K_M)",
+        description: "IBM Granite 4.2 3B reasoning model with Q3_K_M quantization. Good quality with built-in chain-of-thought thinking. 128k context. (1.84GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q3_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 1835968032,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q3_K_L)",
+        description: "IBM Granite 4.2 3B reasoning model with Q3_K_L quantization. Better quality with built-in chain-of-thought thinking. 128k context. (1.97GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q3_K_L.gguf?download=true",
+        category: .text,
+        sizeBytes: 1974576672,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q4_0)",
+        description: "IBM Granite 4.2 3B reasoning model with Q4_0 quantization. Standard 4-bit balance with built-in chain-of-thought thinking. 128k context. (2.13GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q4_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 2129118752,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q4_1)",
+        description: "IBM Granite 4.2 3B reasoning model with Q4_1 quantization. Enhanced 4-bit quality with built-in chain-of-thought thinking. 128k context. (2.34GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q4_1.gguf?download=true",
+        category: .text,
+        sizeBytes: 2341783072,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q4_K_S)",
+        description: "IBM Granite 4.2 3B reasoning model with Q4_K_S quantization. High quality compact with built-in chain-of-thought thinking. 128k context. (2.14GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q4_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 2142881312,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q4_K_M)",
+        description: "IBM Granite 4.2 3B reasoning model with Q4_K_M quantization. Very high quality recommended with built-in chain-of-thought thinking. 128k context. (2.24GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q4_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 2244011552,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q5_0)",
+        description: "IBM Granite 4.2 3B reasoning model with Q5_0 quantization. Near-lossless with built-in chain-of-thought thinking. 128k context. (2.55GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q5_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 2554447392,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 5),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q5_1)",
+        description: "IBM Granite 4.2 3B reasoning model with Q5_1 quantization. Premium quality with built-in chain-of-thought thinking. 128k context. (2.77GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q5_1.gguf?download=true",
+        category: .text,
+        sizeBytes: 2767111712,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 5),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q5_K_S)",
+        description: "IBM Granite 4.2 3B reasoning model with Q5_K_S quantization. Excellent quality with built-in chain-of-thought thinking. 128k context. (2.55GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q5_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 2554447392,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 5),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q5_K_M)",
+        description: "IBM Granite 4.2 3B reasoning model with Q5_K_M quantization. Superior quality with built-in chain-of-thought thinking. 128k context. (2.61GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q5_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 2613634592,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 5),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q6_K)",
+        description: "IBM Granite 4.2 3B reasoning model with Q6_K quantization. Outstanding quality with built-in chain-of-thought thinking. 128k context. (3.01GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q6_K.gguf?download=true",
+        category: .text,
+        sizeBytes: 3006359072,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (Q8_0)",
+        description: "IBM Granite 4.2 3B reasoning model with Q8_0 quantization. Ultimate quality with built-in chain-of-thought thinking. 128k context. (3.89GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-Q8_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 3892651552,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 7),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 3B (bf16)",
+        description: "IBM Granite 4.2 3B reasoning model with bf16 quantization. Full precision unquantized with built-in chain-of-thought thinking. 128k context. (7.32GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/c40945d71cd90f249a56985e8155551a9188dc30/granite-4.2-3b-bf16.gguf?download=true",
+        category: .text,
+        sizeBytes: 7323461152,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 9, recommendedRamGB: 12),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+
+    // Granite 4.2 8B Models (IBM)
+    AIModel(
+        name: "Granite 4.2 8B (Q2_K)",
+        description: "IBM Granite 4.2 8B reasoning model with Q2_K quantization. Smallest size with built-in chain-of-thought thinking. 128k context. (3.41GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q2_K.gguf?download=true",
+        category: .text,
+        sizeBytes: 3412312192,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q3_K_S)",
+        description: "IBM Granite 4.2 8B reasoning model with Q3_K_S quantization. Balanced size with built-in chain-of-thought thinking. 128k context. (3.94GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q3_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 3942957184,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 7),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q3_K_M)",
+        description: "IBM Granite 4.2 8B reasoning model with Q3_K_M quantization. Good quality with built-in chain-of-thought thinking. 128k context. (4.35GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q3_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 4347052160,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 7),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q3_K_L)",
+        description: "IBM Granite 4.2 8B reasoning model with Q3_K_L quantization. Better quality with built-in chain-of-thought thinking. 128k context. (4.70GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q3_K_L.gguf?download=true",
+        category: .text,
+        sizeBytes: 4699897984,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 7),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q4_0)",
+        description: "IBM Granite 4.2 8B reasoning model with Q4_0 quantization. Standard 4-bit balance with built-in chain-of-thought thinking. 128k context. (5.06GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q4_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 5055955072,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q4_1)",
+        description: "IBM Granite 4.2 8B reasoning model with Q4_1 quantization. Enhanced 4-bit quality with built-in chain-of-thought thinking. 128k context. (5.58GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q4_1.gguf?download=true",
+        category: .text,
+        sizeBytes: 5579718784,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q4_K_S)",
+        description: "IBM Granite 4.2 8B reasoning model with Q4_K_S quantization. High quality compact with built-in chain-of-thought thinking. 128k context. (5.09GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q4_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 5090820224,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q4_K_M)",
+        description: "IBM Granite 4.2 8B reasoning model with Q4_K_M quantization. Very high quality recommended with built-in chain-of-thought thinking. 128k context. (5.35GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q4_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 5347917952,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q5_0)",
+        description: "IBM Granite 4.2 8B reasoning model with Q5_0 quantization. Near-lossless with built-in chain-of-thought thinking. 128k context. (6.10GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q5_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 6103482496,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 10),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q5_1)",
+        description: "IBM Granite 4.2 8B reasoning model with Q5_1 quantization. Premium quality with built-in chain-of-thought thinking. 128k context. (6.63GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q5_1.gguf?download=true",
+        category: .text,
+        sizeBytes: 6627246208,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 10),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q5_K_S)",
+        description: "IBM Granite 4.2 8B reasoning model with Q5_K_S quantization. Excellent quality with built-in chain-of-thought thinking. 128k context. (6.10GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q5_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 6103482496,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 10),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q5_K_M)",
+        description: "IBM Granite 4.2 8B reasoning model with Q5_K_M quantization. Superior quality with built-in chain-of-thought thinking. 128k context. (6.25GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q5_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 6253887616,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 10),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q6_K)",
+        description: "IBM Granite 4.2 8B reasoning model with Q6_K quantization. Outstanding quality with built-in chain-of-thought thinking. 128k context. (7.22GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q6_K.gguf?download=true",
+        category: .text,
+        sizeBytes: 7216480384,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 9, recommendedRamGB: 12),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (Q8_0)",
+        description: "IBM Granite 4.2 8B reasoning model with Q8_0 quantization. Ultimate quality with built-in chain-of-thought thinking. 128k context. (9.35GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-Q8_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 9345613952,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 11, recommendedRamGB: 14),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 8B (bf16)",
+        description: "IBM Granite 4.2 8B reasoning model with bf16 quantization. Full precision unquantized with built-in chain-of-thought thinking. 128k context. (17.59GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/93f3f6a8938ee922b784cf4e5b4203cd3428df8f/granite-4.2-8b-bf16.gguf?download=true",
+        category: .text,
+        sizeBytes: 17587421312,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+
+    // Granite 4.2 30B Models (IBM)
+    AIModel(
+        name: "Granite 4.2 30B (Q2_K)",
+        description: "IBM Granite 4.2 30B reasoning model with Q2_K quantization. Smallest size with built-in chain-of-thought thinking. 128k context. (10.86GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q2_K.gguf?download=true",
+        category: .text,
+        sizeBytes: 10858656480,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q3_K_S)",
+        description: "IBM Granite 4.2 30B reasoning model with Q3_K_S quantization. Balanced size with built-in chain-of-thought thinking. 128k context. (12.75GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q3_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 12745896672,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 15, recommendedRamGB: 18),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q3_K_M)",
+        description: "IBM Granite 4.2 30B reasoning model with Q3_K_M quantization. Good quality with built-in chain-of-thought thinking. 128k context. (14.13GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q3_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 14133162720,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 15, recommendedRamGB: 18),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q3_K_L)",
+        description: "IBM Granite 4.2 30B reasoning model with Q3_K_L quantization. Better quality with built-in chain-of-thought thinking. 128k context. (15.31GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q3_K_L.gguf?download=true",
+        category: .text,
+        sizeBytes: 15306519264,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 15, recommendedRamGB: 18),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q4_0)",
+        description: "IBM Granite 4.2 30B reasoning model with Q4_0 quantization. Standard 4-bit balance with built-in chain-of-thought thinking. 128k context. (16.58GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q4_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 16579556064,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 18, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q4_1)",
+        description: "IBM Granite 4.2 30B reasoning model with Q4_1 quantization. Enhanced 4-bit quality with built-in chain-of-thought thinking. 128k context. (18.38GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q4_1.gguf?download=true",
+        category: .text,
+        sizeBytes: 18383631072,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 18, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q4_K_S)",
+        description: "IBM Granite 4.2 30B reasoning model with Q4_K_S quantization. High quality compact with built-in chain-of-thought thinking. 128k context. (16.72GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q4_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 16715870944,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 18, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q4_K_M)",
+        description: "IBM Granite 4.2 30B reasoning model with Q4_K_M quantization. Very high quality recommended with built-in chain-of-thought thinking. 128k context. (17.72GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q4_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 17721455328,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 18, recommendedRamGB: 24),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q5_0)",
+        description: "IBM Granite 4.2 30B reasoning model with Q5_0 quantization. Near-lossless with built-in chain-of-thought thinking. 128k context. (20.19GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q5_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 20187706080,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 22, recommendedRamGB: 28),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q5_1)",
+        description: "IBM Granite 4.2 30B reasoning model with Q5_1 quantization. Premium quality with built-in chain-of-thought thinking. 128k context. (21.99GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q5_1.gguf?download=true",
+        category: .text,
+        sizeBytes: 21991781088,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 22, recommendedRamGB: 28),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q5_K_S)",
+        description: "IBM Granite 4.2 30B reasoning model with Q5_K_S quantization. Excellent quality with built-in chain-of-thought thinking. 128k context. (20.19GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q5_K_S.gguf?download=true",
+        category: .text,
+        sizeBytes: 20187706080,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 22, recommendedRamGB: 28),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q5_K_M)",
+        description: "IBM Granite 4.2 30B reasoning model with Q5_K_M quantization. Superior quality with built-in chain-of-thought thinking. 128k context. (20.78GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q5_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 20775957216,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 22, recommendedRamGB: 28),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q6_K)",
+        description: "IBM Granite 4.2 30B reasoning model with Q6_K quantization. Outstanding quality with built-in chain-of-thought thinking. 128k context. (24.02GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q6_K.gguf?download=true",
+        category: .text,
+        sizeBytes: 24021365472,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 26, recommendedRamGB: 32),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (Q8_0)",
+        description: "IBM Granite 4.2 30B reasoning model with Q8_0 quantization. Ultimate quality with built-in chain-of-thought thinking. 128k context. (58.56GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-Q8_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 31111705312,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 34, recommendedRamGB: 40),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Granite 4.2 30B (bf16)",
+        description: "IBM Granite 4.2 30B reasoning model in full bfloat16 precision (2 shards). Maximum quality with built-in chain-of-thought thinking. 128k context. (58.56GB)",
+        url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-bf16-00001-of-00002.gguf?download=true",
+        category: .text,
+        sizeBytes: 58558182336,
+        source: "IBM Granite",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: true,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 62, recommendedRamGB: 72),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: [
+            "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/27b350a791e81d9a4d1ddca1c49282e9ec533768/granite-4.2-30b-bf16-00002-of-00002.gguf?download=true"
+        ]
+    ),
+
     AIModel(
         name: "LFM-2.5 1.2B Instruct (Q4_0)",
         description: "LiquidAI's 1.2B instruct model. Q4_0 quantization. 128k context.",
@@ -1473,6 +2431,120 @@ public static let models: [AIModel] = [
         additionalFiles: []
     ),
     
+    // MARK: - LFM-2.5 2.6B Models (LiquidAI GGUF)
+    AIModel(
+        name: "LFM-2.5 2.6B (Q4_0)",
+        description: "LiquidAI's 2.6B parameter hybrid model. Q4_0 quantization. 128k context. (1.59GB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/b421ad1d549afeda6a0fb2ad3a697cb5a7879adc/LFM2.5-2.6B-Q4_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 1593894720,
+        source: "LiquidAI",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 2.6B (Q4_K_M)",
+        description: "LiquidAI's 2.6B parameter hybrid model. Q4_K_M quantization, recommended. 128k context. (1.67GB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/b421ad1d549afeda6a0fb2ad3a697cb5a7879adc/LFM2.5-2.6B-Q4_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 1674454848,
+        source: "LiquidAI",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 2.6B (Q5_K_M)",
+        description: "LiquidAI's 2.6B parameter hybrid model. Q5_K_M quantization. 128k context. (1.94GB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/b421ad1d549afeda6a0fb2ad3a697cb5a7879adc/LFM2.5-2.6B-Q5_K_M.gguf?download=true",
+        category: .text,
+        sizeBytes: 1939744576,
+        source: "LiquidAI",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 5),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 2.6B (Q6_K)",
+        description: "LiquidAI's 2.6B parameter hybrid model. Q6_K quantization. 128k context. (2.22GB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/b421ad1d549afeda6a0fb2ad3a697cb5a7879adc/LFM2.5-2.6B-Q6_K.gguf?download=true",
+        category: .text,
+        sizeBytes: 2221614912,
+        source: "LiquidAI",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 2.6B (Q8_0)",
+        description: "LiquidAI's 2.6B parameter hybrid model. Q8_0 quantization. 128k context. (2.87GB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/b421ad1d549afeda6a0fb2ad3a697cb5a7879adc/LFM2.5-2.6B-Q8_0.gguf?download=true",
+        category: .text,
+        sizeBytes: 2874779456,
+        source: "LiquidAI",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 2.6B (BF16)",
+        description: "LiquidAI's 2.6B parameter hybrid model. BF16 (bfloat16 precision) variant. 128k context. (5.40GB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/b421ad1d549afeda6a0fb2ad3a697cb5a7879adc/LFM2.5-2.6B-BF16.gguf?download=true",
+        category: .text,
+        sizeBytes: 5403158336,
+        source: "LiquidAI",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 7, recommendedRamGB: 9),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 2.6B (F16)",
+        description: "LiquidAI's 2.6B parameter hybrid model. F16 (float16 precision) variant. 128k context. (5.40GB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-2.6B-GGUF/resolve/b421ad1d549afeda6a0fb2ad3a697cb5a7879adc/LFM2.5-2.6B-F16.gguf?download=true",
+        category: .text,
+        sizeBytes: 5403158336,
+        source: "LiquidAI",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 7, recommendedRamGB: 9),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    
     // MARK: - LFM-2.5 8B Models (LiquidAI GGUF - MoE, 8.3B total / 1.5B active params)
     AIModel(
         name: "LFM2.5-8B-A1B (Q4_0)",
@@ -1483,7 +2555,7 @@ public static let models: [AIModel] = [
         source: "LiquidAI",
         supportsVision: false,
         supportsAudio: false,
-        supportsThinking: true,
+        supportsThinking: false,
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
         contextWindowSize: 131072,
@@ -1499,7 +2571,7 @@ public static let models: [AIModel] = [
         source: "LiquidAI",
         supportsVision: false,
         supportsAudio: false,
-        supportsThinking: true,
+        supportsThinking: false,
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 7, recommendedRamGB: 9),
         contextWindowSize: 131072,
@@ -1515,7 +2587,7 @@ public static let models: [AIModel] = [
         source: "LiquidAI",
         supportsVision: false,
         supportsAudio: false,
-        supportsThinking: true,
+        supportsThinking: false,
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 10),
         contextWindowSize: 131072,
@@ -1531,7 +2603,7 @@ public static let models: [AIModel] = [
         source: "LiquidAI",
         supportsVision: false,
         supportsAudio: false,
-        supportsThinking: true,
+        supportsThinking: false,
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 9, recommendedRamGB: 11),
         contextWindowSize: 131072,
@@ -1547,7 +2619,7 @@ public static let models: [AIModel] = [
         source: "LiquidAI",
         supportsVision: false,
         supportsAudio: false,
-        supportsThinking: true,
+        supportsThinking: false,
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 11, recommendedRamGB: 14),
         contextWindowSize: 131072,
@@ -1563,7 +2635,7 @@ public static let models: [AIModel] = [
         source: "LiquidAI",
         supportsVision: false,
         supportsAudio: false,
-        supportsThinking: true,
+        supportsThinking: false,
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
         contextWindowSize: 131072,
@@ -1579,7 +2651,7 @@ public static let models: [AIModel] = [
         source: "LiquidAI",
         supportsVision: false,
         supportsAudio: false,
-        supportsThinking: true,
+        supportsThinking: false,
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 20, recommendedRamGB: 24),
         contextWindowSize: 131072,
@@ -1751,6 +2823,157 @@ public static let models: [AIModel] = [
         modelFormat: .gguf,
         additionalFiles: []
     ),
+    // MARK: - LFM-2.5 VL 3B Models (LiquidAI Vision-Language GGUF)
+    AIModel(
+        name: "LFM-2.5 VL 3B (Q4_0)",
+        description: "LiquidAI's 3B vision-language model. Q4_0 quantization. Supports vision + text. Requires mmproj for vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/LFM2.5-VL-3B-Q4_0.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 1593894112,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (Q4_K_M)",
+        description: "LiquidAI's 3B vision-language model. Q4_K_M quantization, recommended. Supports vision + text. Requires mmproj for vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/LFM2.5-VL-3B-Q4_K_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 1674454240,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (Q5_K_M)",
+        description: "LiquidAI's 3B vision-language model. Q5_K_M quantization. Supports vision + text. Requires mmproj for vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/LFM2.5-VL-3B-Q5_K_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 1939743968,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 5),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (Q6_K)",
+        description: "LiquidAI's 3B vision-language model. Q6_K quantization. Supports vision + text. Requires mmproj for vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/LFM2.5-VL-3B-Q6_K.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 2221614304,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (Q8_0)",
+        description: "LiquidAI's 3B vision-language model. Q8_0 quantization. Supports vision + text. Requires mmproj for vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/LFM2.5-VL-3B-Q8_0.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 2874778848,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (BF16)",
+        description: "LiquidAI's 3B vision-language model. BF16 precision. Supports vision + text. Requires mmproj for vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/LFM2.5-VL-3B-BF16.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 5403157728,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 7, recommendedRamGB: 9),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (F16)",
+        description: "LiquidAI's 3B vision-language model. F16 precision. Supports vision + text. Requires mmproj for vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/LFM2.5-VL-3B-F16.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 5403157728,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 7, recommendedRamGB: 9),
+        contextWindowSize: 128000,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (Vision Projector, BF16)",
+        description: "Vision Projector for LFM-2.5 VL 3B models. BF16 variant required for image input. Download this to enable vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/mmproj-LFM2.5-VL-3B-BF16.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 855762560,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (Vision Projector, F16)",
+        description: "Vision Projector for LFM-2.5 VL 3B models. F16 variant required for image input. Download this to enable vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/mmproj-LFM2.5-VL-3B-F16.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 853993088,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "LFM-2.5 VL 3B (Vision Projector, Q8_0)",
+        description: "Vision Projector for LFM-2.5 VL 3B models. Q8_0 quantized variant for smaller size. Download this to enable vision.",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-VL-3B-GGUF/resolve/3e0e828198e2abb75a957ad823f5d691c13f0f28/mmproj-LFM2.5-VL-3B-Q8_0.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 583109120,
+        source: "LiquidAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
     AIModel(
         name: "Ministral-3 3B Instruct (Q4_K_M)",
         description: "MistralAI's 3B instruct model. Q4_K_M quantization. 32k context. Supports Vision (Requires mmproj).",
@@ -1802,6 +3025,128 @@ public static let models: [AIModel] = [
         url: "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf?download=true",
         category: .multimodal,
         sizeBytes: 842000000,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    // MARK: - Ministral-3 8B Instruct Models (MistralAI GGUF)
+    AIModel(
+        name: "Ministral-3 8B Instruct (Q4_K_M)",
+        description: "MistralAI's 8B instruct model. Q4_K_M quantization. 128k context. Supports Vision (Requires mmproj).",
+        url: "https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-GGUF/resolve/0102285ad796bd99af90f58de616092e5630e970/Ministral-3-8B-Instruct-2512-Q4_K_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 5198911904,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Ministral-3 8B Instruct (Q5_K_M)",
+        description: "MistralAI's 8B instruct model. Q5_K_M quantization. 128k context. Supports Vision (Requires mmproj).",
+        url: "https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-GGUF/resolve/0102285ad796bd99af90f58de616092e5630e970/Ministral-3-8B-Instruct-2512-Q5_K_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 6059268512,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 10),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Ministral-3 8B Instruct (Q8_0)",
+        description: "MistralAI's 8B instruct model. Q8_0 quantization. 128k context. Supports Vision (Requires mmproj).",
+        url: "https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-GGUF/resolve/0102285ad796bd99af90f58de616092e5630e970/Ministral-3-8B-Instruct-2512-Q8_0.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 9029392800,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 10, recommendedRamGB: 12),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Ministral-3 8B Instruct (Vision Projector, BF16)",
+        description: "Multimodal Vision Projector for Ministral-3 8B models. Specifically the BF16 variant required for image input capabilities.",
+        url: "https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-GGUF/resolve/0102285ad796bd99af90f58de616092e5630e970/Ministral-3-8B-Instruct-2512-BF16-mmproj.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 858283168,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    // MARK: - Ministral-3 14B Instruct Models (MistralAI GGUF)
+    AIModel(
+        name: "Ministral-3 14B Instruct (Q4_K_M)",
+        description: "MistralAI's 14B instruct model. Q4_K_M quantization. 128k context. Supports Vision (Requires mmproj).",
+        url: "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/resolve/74fac473c43357d7fb2671713608183cc72496d0/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 8239593024,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 10, recommendedRamGB: 12),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Ministral-3 14B Instruct (Q5_K_M)",
+        description: "MistralAI's 14B instruct model. Q5_K_M quantization. 128k context. Supports Vision (Requires mmproj).",
+        url: "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/resolve/74fac473c43357d7fb2671713608183cc72496d0/Ministral-3-14B-Instruct-2512-Q5_K_M.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 9621091904,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Ministral-3 14B Instruct (Q8_0)",
+        description: "MistralAI's 14B instruct model. Q8_0 quantization. 128k context. Supports Vision (Requires mmproj).",
+        url: "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/resolve/74fac473c43357d7fb2671713608183cc72496d0/Ministral-3-14B-Instruct-2512-Q8_0.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 14359836224,
+        source: "MistralAI",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 16, recommendedRamGB: 20),
+        contextWindowSize: 131072,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Ministral-3 14B Instruct (Vision Projector, BF16)",
+        description: "Multimodal Vision Projector for Ministral-3 14B models. Specifically the BF16 variant required for image input capabilities.",
+        url: "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/resolve/74fac473c43357d7fb2671713608183cc72496d0/Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf?download=true",
+        category: .multimodal,
+        sizeBytes: 879258784,
         source: "MistralAI",
         supportsVision: true,
         supportsAudio: false,
@@ -1876,216 +3221,6 @@ public static let models: [AIModel] = [
         additionalFiles: []
     ),
     AIModel(
-        name: "Translate Gemma 4B (Q2_K)",
-        description: "Translate Gemma 4B with Q2_K quantization. Smallest Translate Gemma option. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q2_K.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 1729180160,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 5),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q3_K_L)",
-        description: "Translate Gemma 4B with Q3_K_L quantization. Larger 3-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q3_K_L.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 2236101120,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q3_K_M)",
-        description: "Translate Gemma 4B with Q3_K_M quantization. Balanced 3-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q3_K_M.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 2098475520,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 5),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q3_K_S)",
-        description: "Translate Gemma 4B with Q3_K_S quantization. Small 3-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q3_K_S.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 1937379840,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 5),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (IQ4_XS)",
-        description: "Translate Gemma 4B with IQ4_XS quantization. Efficient 4-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.IQ4_XS.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 2279641600,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 6),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q4_K_S)",
-        description: "Translate Gemma 4B with Q4_K_S quantization. Smaller 4-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q4_K_S.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 2377945600,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 6),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q4_K_M)",
-        description: "Translate Gemma 4B with Q4_K_M quantization. Recommended balance for quality and size. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q4_K_M.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 2489909760,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 6),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q5_K_S)",
-        description: "Translate Gemma 4B with Q5_K_S quantization. Higher-quality 5-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q5_K_S.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 2764608000,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q5_K_M)",
-        description: "Translate Gemma 4B with Q5_K_M quantization. High-quality 5-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q5_K_M.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 2829713920,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q6_K)",
-        description: "Translate Gemma 4B with Q6_K quantization. High-precision 6-bit variant. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q6_K.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 3190755840,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 7, recommendedRamGB: 8),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Q8_0)",
-        description: "Translate Gemma 4B with Q8_0 quantization. Near full quality. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.Q8_0.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 4130417920,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 10),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (F16)",
-        description: "Translate Gemma 4B with F16 precision. Highest quality and largest download. Supports text + vision and requires a separate Vision Projector (mmproj). 2k context.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.f16.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 7767819520,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
-        contextWindowSize: 2048,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Vision Projector, Q8_0)",
-        description: "Vision Projector (mmproj) required to enable image input for Translate Gemma 4B quantized variants.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.mmproj-Q8_0.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 591377600,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
-        contextWindowSize: 0,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Translate Gemma 4B (Vision Projector, F16)",
-        description: "Vision Projector (mmproj) required to enable image input for the F16 Translate Gemma 4B variant.",
-        url: "https://huggingface.co/mradermacher/translategemma-4b-it-GGUF/resolve/main/translategemma-4b-it.mmproj-f16.gguf?download=true",
-        category: .multimodal,
-        sizeBytes: 851251520,
-        source: "Google via mradermacher",
-        supportsVision: true,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
-        contextWindowSize: 0,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
         name: "Gemma-3 4B (Q4_0, GGUF)",
         description: "Google Gemma-3 4B quantized GGUF (Q4_0). Supports text + vision — download the Vision Projector (mmproj) to enable image input.",
         url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_0.gguf?download=true",
@@ -2142,37 +3277,6 @@ public static let models: [AIModel] = [
         supportsGpu: true,
         requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
         contextWindowSize: 0,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    // MARK: - Ternary Bonsai Models (prism-ml)
-    AIModel(
-        name: "Ternary Bonsai 1.7B (F16)",
-        description: "Ternary Bonsai 1.7B in full float16 precision. Highest quality variant for high-end devices with ample RAM. (3.21GB)",
-        url: "https://huggingface.co/prism-ml/Ternary-Bonsai-1.7B-gguf/resolve/main/Ternary-Bonsai-1.7B-F16.gguf?download=true",
-        category: .text,
-        sizeBytes: 3446249408,
-        source: "Prism ML",
-        supportsVision: false,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 5, recommendedRamGB: 6),
-        contextWindowSize: 4096,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Ternary Bonsai 4B (F16)",
-        description: "Ternary Bonsai 4B in full float16 precision. High quality, large size. (7.50GB)",
-        url: "https://huggingface.co/prism-ml/Ternary-Bonsai-4B-gguf/resolve/main/Ternary-Bonsai-4B-F16.gguf?download=true",
-        category: .text,
-        sizeBytes: 8049911840,
-        source: "Prism ML",
-        supportsVision: false,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 10, recommendedRamGB: 12),
-        contextWindowSize: 4096,
         modelFormat: .gguf,
         additionalFiles: []
     ),
@@ -2437,7 +3541,7 @@ public static let models: [AIModel] = [
     // MARK: - Gemma 4 LiteRT-LM (Google native on-device, GPU/Metal)
     AIModel(
         name: "Gemma 4 E2B (LiteRT-LM)",
-        description: "Google Gemma 4 E2B via LiteRT-LM — Google's native on-device runtime with GPU/Metal acceleration. Multimodal: supports text + vision + audio. 32k context. (2.41 GB)",
+        description: "Google Gemma 4 E2B via LiteRT-LM — Google's native on-device runtime with GPU/Metal acceleration. Multimodal: supports text + vision + audio with MTP acceleration. 32k context. (2.41 GB)",
         url: "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/a4a831c060880f3733135ad22f10e0e9f758f45d/gemma-4-E2B-it.litertlm?download=true",
         category: .multimodal,
         sizeBytes: 2588147712,
@@ -2446,6 +3550,7 @@ public static let models: [AIModel] = [
         supportsAudio: true,
         supportsThinking: true,
         supportsGpu: true,
+        supportsMtp: true,
         requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
         contextWindowSize: 32768,
         modelFormat: .litertlm,
@@ -2453,7 +3558,7 @@ public static let models: [AIModel] = [
     ),
     AIModel(
         name: "Gemma 4 E4B (LiteRT-LM)",
-        description: "Google Gemma 4 E4B via LiteRT-LM — Google's native on-device runtime with GPU/Metal acceleration. Multimodal: supports text + vision + audio. 32k context. (3.41 GB)",
+        description: "Google Gemma 4 E4B via LiteRT-LM — Google's native on-device runtime with GPU/Metal acceleration. Multimodal: supports text + vision + audio with MTP acceleration. 32k context. (3.41 GB)",
         url: "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/28299f30ee4d43294517a4ac93abd6163412f07f/gemma-4-E4B-it.litertlm?download=true",
         category: .multimodal,
         sizeBytes: 3659530240,
@@ -2462,6 +3567,7 @@ public static let models: [AIModel] = [
         supportsAudio: true,
         supportsThinking: true,
         supportsGpu: true,
+        supportsMtp: true,
         requirements: ModelRequirements(minRamGB: 6, recommendedRamGB: 8),
         contextWindowSize: 32768,
         modelFormat: .litertlm,
@@ -2469,17 +3575,18 @@ public static let models: [AIModel] = [
     ),
     AIModel(
         name: "Gemma 4 12B (LiteRT-LM)",
-        description: "Google Gemma 4 12B via LiteRT-LM — Google's native on-device runtime with GPU/Metal acceleration. 32k context. (6.54 GB)",
-        url: "https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/44cf85a326f79b814fa86a60af414c042755b43a/gemma-4-12B-it.litertlm?download=true",
-        category: .text,
-        sizeBytes: 6547589312,
+        description: "Google Gemma 4 12B via LiteRT-LM — Google's native on-device runtime with GPU/Metal acceleration. Multimodal: supports text + vision + audio with MTP acceleration. 32k context. (6.88 GB)",
+        url: "https://huggingface.co/litert-community/gemma-4-12B-it-litert-lm/resolve/7a0b1ce0ea821bcd01c5f72af84155e02191152f/gemma-4-12B-it.litertlm?download=true",
+        category: .multimodal,
+        sizeBytes: 6883278368,
         source: "Google via LiteRT Community",
-        supportsVision: false,
-        supportsAudio: false,
+        supportsVision: true,
+        supportsAudio: true,
         supportsThinking: true,
         supportsGpu: true,
+        supportsMtp: true,
         requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
-        contextWindowSize: 4096,
+        contextWindowSize: 32768,
         modelFormat: .litertlm,
         additionalFiles: []
     ),
@@ -2559,38 +3666,236 @@ public static let models: [AIModel] = [
         modelFormat: .gguf,
         additionalFiles: []
     ),
+    // MARK: - Gemma 4 26B-A4B (26B mixture, 4B active params)
+    AIModel(
+        name: "Gemma 4 26B-A4B (UD-IQ2_XXS, GGUF)",
+        description: "Google Gemma 4 26B-A4B UD-IQ2_XXS GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~9.24 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/gemma-4-26B-A4B-it-UD-IQ2_XXS.gguf",
+        category: .multimodal,
+        sizeBytes: 9922478624,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 26B-A4B (UD-IQ2_M, GGUF)",
+        description: "Google Gemma 4 26B-A4B UD-IQ2_M GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~9.33 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/gemma-4-26B-A4B-it-UD-IQ2_M.gguf",
+        category: .multimodal,
+        sizeBytes: 10014753312,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 26B-A4B (UD-Q2_K_XL, GGUF)",
+        description: "Google Gemma 4 26B-A4B UD-Q2_K_XL GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~9.82 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf",
+        category: .multimodal,
+        sizeBytes: 10546932256,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 26B-A4B (UD-IQ3_S, GGUF)",
+        description: "Google Gemma 4 26B-A4B UD-IQ3_S GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~10.51 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/gemma-4-26B-A4B-it-UD-IQ3_S.gguf",
+        category: .multimodal,
+        sizeBytes: 11289669152,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 26B-A4B (UD-IQ3_XXS, GGUF)",
+        description: "Google Gemma 4 26B-A4B UD-IQ3_XXS GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~10.63 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
+        category: .multimodal,
+        sizeBytes: 11416546848,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 26B-A4B (Vision Projector, BF16)",
+        description: "Vision Projector (mmproj) required to enable image input for Gemma 4 26B-A4B GGUF models. BF16 variant. ~1.11 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/mmproj-BF16.gguf",
+        category: .multimodal,
+        sizeBytes: 1194828256,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 2, recommendedRamGB: 3),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 26B-A4B (Vision Projector, F16)",
+        description: "Vision Projector (mmproj) required to enable image input for Gemma 4 26B-A4B GGUF models. F16 variant. ~1.11 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/mmproj-F16.gguf",
+        category: .multimodal,
+        sizeBytes: 1193058784,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 2, recommendedRamGB: 3),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 26B-A4B (Vision Projector, F32)",
+        description: "Vision Projector (mmproj) required to enable image input for Gemma 4 26B-A4B GGUF models. F32 variant. ~2.13 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/3bb10d594514ef4edb7f3a65d41a7e4eb8c5767a/mmproj-F32.gguf",
+        category: .multimodal,
+        sizeBytes: 2291200480,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    
+    // MARK: - Gemma 4 31B (31B mixture, 4B active params)
+    AIModel(
+        name: "Gemma 4 31B (UD-IQ2_XXS, GGUF)",
+        description: "Google Gemma 4 31B UD-IQ2_XXS GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~7.95 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/8906b3db2e669a0b1d6293c315d3f9fbf934a86d/gemma-4-31B-it-UD-IQ2_XXS.gguf",
+        category: .multimodal,
+        sizeBytes: 8534293504,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 31B (UD-IQ2_M, GGUF)",
+        description: "Google Gemma 4 31B UD-IQ2_M GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~10.01 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/8906b3db2e669a0b1d6293c315d3f9fbf934a86d/gemma-4-31B-it-UD-IQ2_M.gguf",
+        category: .multimodal,
+        sizeBytes: 10752818176,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 31B (UD-Q2_K_XL, GGUF)",
+        description: "Google Gemma 4 31B UD-Q2_K_XL GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~10.97 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/8906b3db2e669a0b1d6293c315d3f9fbf934a86d/gemma-4-31B-it-UD-Q2_K_XL.gguf",
+        category: .multimodal,
+        sizeBytes: 11774989312,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 31B (UD-IQ3_XXS, GGUF)",
+        description: "Google Gemma 4 31B UD-IQ3_XXS GGUF. Supports text + vision — download the Vision Projector (mmproj) to enable image input. ~11.02 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/8906b3db2e669a0b1d6293c315d3f9fbf934a86d/gemma-4-31B-it-UD-IQ3_XXS.gguf",
+        category: .multimodal,
+        sizeBytes: 11837780992,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 12, recommendedRamGB: 16),
+        contextWindowSize: 32768,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 31B (Vision Projector, BF16)",
+        description: "Vision Projector (mmproj) required to enable image input for Gemma 4 31B GGUF models. BF16 variant. ~1.12 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/8906b3db2e669a0b1d6293c315d3f9fbf934a86d/mmproj-BF16.gguf",
+        category: .multimodal,
+        sizeBytes: 1200726496,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 2, recommendedRamGB: 3),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 31B (Vision Projector, F16)",
+        description: "Vision Projector (mmproj) required to enable image input for Gemma 4 31B GGUF models. F16 variant. ~1.12 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/8906b3db2e669a0b1d6293c315d3f9fbf934a86d/mmproj-F16.gguf",
+        category: .multimodal,
+        sizeBytes: 1198957024,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 2, recommendedRamGB: 3),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
+    AIModel(
+        name: "Gemma 4 31B (Vision Projector, F32)",
+        description: "Vision Projector (mmproj) required to enable image input for Gemma 4 31B GGUF models. F32 variant. ~2.14 GB download.",
+        url: "https://huggingface.co/unsloth/gemma-4-31B-it-GGUF/resolve/8906b3db2e669a0b1d6293c315d3f9fbf934a86d/mmproj-F32.gguf",
+        category: .multimodal,
+        sizeBytes: 2302996960,
+        source: "Google via unsloth",
+        supportsVision: true,
+        supportsAudio: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
+        contextWindowSize: 0,
+        modelFormat: .gguf,
+        additionalFiles: []
+    ),
     
     // MARK: - Phi-4 Mini Models (Microsoft via unsloth GGUF)
-    AIModel(
-        name: "Phi-4 Mini (Q2_K)",
-        description: "Microsoft Phi-4 Mini (3.8B) instruct model with Q2_K quantization. Smallest size. 4k context. (1.68GB)",
-        url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q2_K.gguf?download=true",
-        category: .text,
-        sizeBytes: 1682635744,
-        source: "Microsoft via unsloth",
-        supportsVision: false,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
-        contextWindowSize: 4096,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
-    AIModel(
-        name: "Phi-4 Mini (Q2_K_L)",
-        description: "Microsoft Phi-4 Mini (3.8B) instruct model with Q2_K_L quantization. Large 2-bit. 4k context. (1.68GB)",
-        url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q2_K_L.gguf?download=true",
-        category: .text,
-        sizeBytes: 1682635744,
-        source: "Microsoft via unsloth",
-        supportsVision: false,
-        supportsAudio: false,
-        supportsGpu: true,
-        requirements: ModelRequirements(minRamGB: 3, recommendedRamGB: 4),
-        contextWindowSize: 4096,
-        modelFormat: .gguf,
-        additionalFiles: []
-    ),
     AIModel(
         name: "Phi-4 Mini (Q3_K_M)",
         description: "Microsoft Phi-4 Mini (3.8B) instruct model with Q3_K_M quantization. Balanced 3-bit. 4k context. (2.12GB)",
@@ -2752,69 +4057,82 @@ public static let models: [AIModel] = [
         additionalFiles: []
     ),
 
-    // MARK: - EmbeddingGemma 300M ONNX — Embedding Models for RAG
+    // MARK: - EmbeddingGemma 300M LiteRT — Embedding Models for RAG
 
     AIModel(
-        id: "embeddinggemma-300m-onnx-q4",
-        name: "EmbeddingGemma 300M (Q4)",
-        description: "Google EmbeddingGemma 300M Q4 quantized ONNX. Lightweight semantic embedding model for RAG and memory. (219 MB)",
-        url: "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_q4.onnx?download=true",
+        id: "embeddinggemma-300m-litert-256",
+        name: "EmbeddingGemma 300M LiteRT (256 tokens)",
+        description: "Google EmbeddingGemma mixed-precision LiteRT model for RAG and memory. (179 MB)",
+        url: "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/embeddinggemma-300M_seq256_mixed-precision.tflite?download=true",
         category: .embedding,
-        sizeBytes: 218725224,
-        source: "Google / ONNX Community",
+        sizeBytes: 179131736,
+        source: "Google / LiteRT Community",
         supportsVision: false,
         supportsAudio: false,
         supportsThinking: false,
-        supportsGpu: true,
+        supportsGpu: false,
         requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
-        contextWindowSize: 512,
-        modelFormat: .onnx,
+        contextWindowSize: 256,
+        modelFormat: .tflite,
         additionalFiles: [
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_q4.onnx_data?download=true",
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer.json?download=true",
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer_config.json?download=true"
+            "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/sentencepiece.model?download=true"
         ]
     ),
     AIModel(
-        id: "embeddinggemma-300m-onnx-int8",
-        name: "EmbeddingGemma 300M (INT8)",
-        description: "Google EmbeddingGemma 300M INT8 quantized ONNX. Balanced size and accuracy for RAG and memory. (331 MB)",
-        url: "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_quantized.onnx?download=true",
+        id: "embeddinggemma-300m-litert-512",
+        name: "EmbeddingGemma 300M LiteRT (512 tokens)",
+        description: "Google EmbeddingGemma mixed-precision LiteRT model for RAG and memory. (179 MB)",
+        url: "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/embeddinggemma-300M_seq512_mixed-precision.tflite?download=true",
         category: .embedding,
-        sizeBytes: 330938640,
-        source: "Google / ONNX Community",
+        sizeBytes: 179132472,
+        source: "Google / LiteRT Community",
         supportsVision: false,
         supportsAudio: false,
         supportsThinking: false,
-        supportsGpu: true,
+        supportsGpu: false,
         requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
         contextWindowSize: 512,
-        modelFormat: .onnx,
+        modelFormat: .tflite,
         additionalFiles: [
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_quantized.onnx_data?download=true",
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer.json?download=true",
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer_config.json?download=true"
+            "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/sentencepiece.model?download=true"
         ]
     ),
     AIModel(
-        id: "embeddinggemma-300m-onnx-fp16",
-        name: "EmbeddingGemma 300M (FP16)",
-        description: "Google EmbeddingGemma 300M FP16 ONNX. High-quality semantic embeddings for RAG and memory. Best accuracy. (640 MB)",
-        url: "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_fp16.onnx?download=true",
+        id: "embeddinggemma-300m-litert-1024",
+        name: "EmbeddingGemma 300M LiteRT (1024 tokens)",
+        description: "Google EmbeddingGemma mixed-precision LiteRT model for RAG and memory. (183 MB)",
+        url: "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/embeddinggemma-300M_seq1024_mixed-precision.tflite?download=true",
         category: .embedding,
-        sizeBytes: 639569517,
-        source: "Google / ONNX Community",
+        sizeBytes: 183329528,
+        source: "Google / LiteRT Community",
         supportsVision: false,
         supportsAudio: false,
         supportsThinking: false,
-        supportsGpu: true,
+        supportsGpu: false,
+        requirements: ModelRequirements(minRamGB: 1, recommendedRamGB: 2),
+        contextWindowSize: 1024,
+        modelFormat: .tflite,
+        additionalFiles: [
+            "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/sentencepiece.model?download=true"
+        ]
+    ),
+    AIModel(
+        id: "embeddinggemma-300m-litert-2048",
+        name: "EmbeddingGemma 300M LiteRT (2048 tokens)",
+        description: "Google EmbeddingGemma mixed-precision LiteRT model for RAG and memory. (196 MB)",
+        url: "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/embeddinggemma-300M_seq2048_mixed-precision.tflite?download=true",
+        category: .embedding,
+        sizeBytes: 195912440,
+        source: "Google / LiteRT Community",
+        supportsVision: false,
+        supportsAudio: false,
+        supportsThinking: false,
+        supportsGpu: false,
         requirements: ModelRequirements(minRamGB: 2, recommendedRamGB: 3),
-        contextWindowSize: 512,
-        modelFormat: .onnx,
+        contextWindowSize: 2048,
+        modelFormat: .tflite,
         additionalFiles: [
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_fp16.onnx_data?download=true",
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer.json?download=true",
-            "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer_config.json?download=true"
+            "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/sentencepiece.model?download=true"
         ]
     ),
     AIModel(
@@ -3204,7 +4522,52 @@ public static let models: [AIModel] = [
         contextWindowSize: 0,
         modelFormat: .task,
         additionalFiles: []
+    ),
+    AIModel(
+        id: "magenta_realtime_2_small",
+        name: "Magenta RealTime 2 Small",
+        description: "Google DeepMind Magenta RealTime 2 Small with mapped local MusicCoCa text prompting. Pinned to commit 010aa0d. (~1.04 GB)",
+        url: "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/models/mrt2_small/mrt2_small.mlxfn",
+        category: .musicGeneration,
+        sizeBytes: 1_042_112_092,
+        source: "Google DeepMind",
+        supportsVision: false,
+        supportsAudio: true,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 4, recommendedRamGB: 6),
+        contextWindowSize: 0,
+        modelFormat: .platform,
+        additionalFiles: [
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/models/mrt2_small/mrt2_small_state.safetensors",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/text_encoder.tflite",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/mapper.tflite",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/pretrained_vector_quantizer.tflite",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/spm.model"
+        ]
+    ),
+    AIModel(
+        id: "magenta_realtime_2_base",
+        name: "Magenta RealTime 2 Base",
+        description: "Google DeepMind Magenta RealTime 2 Base with mapped local MusicCoCa text prompting. Pinned to commit 010aa0d. (~3.37 GB)",
+        url: "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/models/mrt2_base/mrt2_base.mlxfn",
+        category: .musicGeneration,
+        sizeBytes: 3_366_135_259,
+        source: "Google DeepMind",
+        supportsVision: false,
+        supportsAudio: true,
+        supportsThinking: false,
+        supportsGpu: true,
+        requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 12),
+        contextWindowSize: 0,
+        modelFormat: .platform,
+        additionalFiles: [
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/models/mrt2_base/mrt2_base_state.safetensors",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/text_encoder.tflite",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/mapper.tflite",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/pretrained_vector_quantizer.tflite",
+            "https://huggingface.co/google/magenta-realtime-2/resolve/010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc/resources/musiccoca/spm.model"
+        ]
     )
 ]
 }
-

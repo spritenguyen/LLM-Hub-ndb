@@ -65,6 +65,226 @@ private final class ThroughputTracker: @unchecked Sendable {
     }
 }
 
+private struct ChunkedDownloadResult: Sendable {
+    let statusCode: Int
+    let contentRange: String?
+    let fileBytes: Int64
+}
+
+/// Streams URLSession-delivered Data chunks directly to disk. URLSession.AsyncBytes
+/// exposes a byte-at-a-time iterator, which is prohibitively expensive for multi-GB
+/// model files. This delegate buffers network chunks into 1 MB writes and limits UI
+/// progress callbacks to five per second.
+private final class ChunkedFileDownloader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let destinationURL: URL
+    private let requestedOffset: Int64
+    private let progressHandler: @Sendable (Int64, Double) -> Void
+    private let writeBufferSize = 1024 * 1024
+    private let progressInterval: TimeInterval = 0.2
+    private let speedWindow: TimeInterval = 3.0
+
+    private let stateLock = NSLock()
+    private var continuation: CheckedContinuation<ChunkedDownloadResult, Error>?
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var cancellationRequested = false
+    private var hasFinished = false
+
+    // Accessed only by the serial URLSession delegate queue.
+    private var fileHandle: FileHandle?
+    private var pendingData = Data()
+    private var baseOffset: Int64 = 0
+    private var receivedBytes: Int64 = 0
+    private var statusCode = 0
+    private var contentRange: String?
+    private var streamError: Error?
+    private var lastProgressTime = Date.distantPast
+    private var throughputSamples: [(time: Date, bytes: Int64)] = []
+
+    init(
+        destinationURL: URL,
+        requestedOffset: Int64,
+        progressHandler: @Sendable @escaping (Int64, Double) -> Void
+    ) {
+        self.destinationURL = destinationURL
+        self.requestedOffset = requestedOffset
+        self.progressHandler = progressHandler
+    }
+
+    func start(request: URLRequest, configuration: URLSessionConfiguration) async throws -> ChunkedDownloadResult {
+        try Task.checkCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let delegateQueue = OperationQueue()
+                delegateQueue.name = "com.llmhub.model-download"
+                delegateQueue.maxConcurrentOperationCount = 1
+
+                let session = URLSession(
+                    configuration: configuration,
+                    delegate: self,
+                    delegateQueue: delegateQueue
+                )
+                let task = session.dataTask(with: request)
+
+                stateLock.lock()
+                self.continuation = continuation
+                self.session = session
+                self.task = task
+                let shouldCancel = cancellationRequested
+                stateLock.unlock()
+
+                if shouldCancel {
+                    task.cancel()
+                } else {
+                    task.resume()
+                }
+            }
+        } onCancel: {
+            self.cancel()
+        }
+    }
+
+    private func cancel() {
+        stateLock.lock()
+        cancellationRequested = true
+        let task = self.task
+        stateLock.unlock()
+        task?.cancel()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            streamError = NSError(
+                domain: "ModelDownloader",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No HTTP response"]
+            )
+            completionHandler(.cancel)
+            return
+        }
+
+        statusCode = httpResponse.statusCode
+        contentRange = httpResponse.value(forHTTPHeaderField: "Content-Range")
+
+        guard (200...299).contains(statusCode) else {
+            // Preserve any partial file for 4xx/5xx handling and resume logic.
+            completionHandler(.allow)
+            return
+        }
+
+        do {
+            let fileManager = FileManager.default
+            if !fileManager.fileExists(atPath: destinationURL.path) {
+                fileManager.createFile(atPath: destinationURL.path, contents: nil)
+            }
+
+            let handle = try FileHandle(forWritingTo: destinationURL)
+            if statusCode == 206 && requestedOffset > 0 {
+                try handle.seekToEnd()
+                baseOffset = requestedOffset
+            } else {
+                try handle.truncate(atOffset: 0)
+                baseOffset = 0
+            }
+            fileHandle = handle
+            completionHandler(.allow)
+        } catch {
+            streamError = error
+            completionHandler(.cancel)
+        }
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard (200...299).contains(statusCode), streamError == nil else { return }
+
+        receivedBytes += Int64(data.count)
+        pendingData.append(data)
+
+        let now = Date()
+        throughputSamples.append((time: now, bytes: Int64(data.count)))
+        let cutoff = now.addingTimeInterval(-speedWindow)
+        throughputSamples.removeAll { $0.time < cutoff }
+
+        do {
+            if pendingData.count >= writeBufferSize {
+                try fileHandle?.write(contentsOf: pendingData)
+                pendingData.removeAll(keepingCapacity: true)
+            }
+        } catch {
+            streamError = error
+            dataTask.cancel()
+            return
+        }
+
+        if now.timeIntervalSince(lastProgressTime) >= progressInterval {
+            lastProgressTime = now
+            progressHandler(baseOffset + receivedBytes, currentSpeed(at: now))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if streamError == nil, (200...299).contains(statusCode), !pendingData.isEmpty {
+            do {
+                try fileHandle?.write(contentsOf: pendingData)
+                pendingData.removeAll(keepingCapacity: true)
+            } catch {
+                streamError = error
+            }
+        }
+
+        try? fileHandle?.close()
+        fileHandle = nil
+
+        let finalError = streamError ?? error
+        if finalError == nil, (200...299).contains(statusCode) {
+            progressHandler(baseOffset + receivedBytes, currentSpeed(at: Date()))
+        }
+
+        finish(
+            with: finalError.map(Result.failure)
+                ?? .success(
+                    ChunkedDownloadResult(
+                        statusCode: statusCode,
+                        contentRange: contentRange,
+                        fileBytes: baseOffset + receivedBytes
+                    )
+                )
+        )
+    }
+
+    private func currentSpeed(at now: Date) -> Double {
+        let cutoff = now.addingTimeInterval(-speedWindow)
+        throughputSamples.removeAll { $0.time < cutoff }
+        guard let first = throughputSamples.first else { return 0 }
+        let bytes = throughputSamples.reduce(Int64(0)) { $0 + $1.bytes }
+        let duration = max(0.1, now.timeIntervalSince(first.time))
+        return Double(bytes) / duration
+    }
+
+    private func finish(with result: Result<ChunkedDownloadResult, Error>) {
+        stateLock.lock()
+        guard !hasFinished else {
+            stateLock.unlock()
+            return
+        }
+        hasFinished = true
+        let continuation = self.continuation
+        self.continuation = nil
+        let session = self.session
+        self.session = nil
+        self.task = nil
+        stateLock.unlock()
+
+        continuation?.resume(with: result)
+        session?.finishTasksAndInvalidate()
+    }
+}
+
 public actor ModelDownloader {
     public static let shared = ModelDownloader()
     
@@ -84,48 +304,72 @@ public actor ModelDownloader {
     }
 
     private func remoteFileSize(fileURL: URL, hfToken: String?) async -> Int64? {
-        func authorizedRequest(method: String) -> URLRequest {
+        func authorizedRequest(method: String, token: String?) -> URLRequest {
             var request = URLRequest(url: fileURL, cachePolicy: .reloadIgnoringLocalCacheData)
             request.httpMethod = method
-            if let token = hfToken, !token.isEmpty {
+            if let token, !token.isEmpty {
                 request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             }
             return request
         }
 
-        // First try HEAD for content length.
-        do {
-            let request = authorizedRequest(method: "HEAD")
-            let (_, response) = try await urlSession.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse,
-               (200...299).contains(httpResponse.statusCode),
-               let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
-               let size = Int64(contentLength),
-               size > 0 {
-                return size
+        func tryFetchSize(token: String?) async -> (size: Int64?, authFailed: Bool) {
+            // First try HEAD for content length.
+            do {
+                let request = authorizedRequest(method: "HEAD", token: token)
+                let (_, response) = try await urlSession.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse {
+                    if (200...299).contains(httpResponse.statusCode),
+                       let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
+                       let size = Int64(contentLength),
+                       size > 0 {
+                        return (size, false)
+                    }
+                    if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                        return (nil, true)
+                    }
+                }
+            } catch {
+                // Fall through to range probe.
             }
-        } catch {
-            // Fall through to range probe.
+
+            // Some endpoints block HEAD; probe with GET Range to parse total size from Content-Range.
+            do {
+                var request = authorizedRequest(method: "GET", token: token)
+                request.addValue("bytes=0-0", forHTTPHeaderField: "Range")
+                let (_, response) = try await urlSession.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse {
+                    if (200...299).contains(httpResponse.statusCode) || httpResponse.statusCode == 206 {
+                        if let total = totalSizeFromContentRange(httpResponse.value(forHTTPHeaderField: "Content-Range")), total > 0 {
+                            return (total, false)
+                        }
+                        if let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
+                           let size = Int64(contentLength),
+                           size > 0 {
+                            return (size, false)
+                        }
+                    }
+                    if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                        return (nil, true)
+                    }
+                }
+            } catch {
+                // Give up and treat as unknown size.
+            }
+            return (nil, false)
         }
 
-        // Some endpoints block HEAD; probe with GET Range to parse total size from Content-Range.
-        do {
-            var request = authorizedRequest(method: "GET")
-            request.addValue("bytes=0-0", forHTTPHeaderField: "Range")
-            let (_, response) = try await urlSession.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse {
-                if let total = totalSizeFromContentRange(httpResponse.value(forHTTPHeaderField: "Content-Range")), total > 0 {
-                    return total
-                }
-                if let contentLength = httpResponse.value(forHTTPHeaderField: "Content-Length"),
-                   let size = Int64(contentLength),
-                   size > 0,
-                   httpResponse.statusCode == 200 {
-                    return size
-                }
+        // Always attempt unauthenticated request first so public models don't use token quota
+        let first = await tryFetchSize(token: nil)
+        if let size = first.size {
+            return size
+        }
+        // If auth failed (401/403) and a token is available, retry with token for gated models
+        if first.authFailed, let hfToken = hfToken, !hfToken.isEmpty {
+            let retry = await tryFetchSize(token: hfToken)
+            if let size = retry.size {
+                return size
             }
-        } catch {
-            // Give up and treat as unknown size.
         }
         return nil
     }
@@ -377,27 +621,6 @@ public actor ModelDownloader {
         let totalSize = model.sizeBytes
         var downloadedBytesPerFile: [String: Int64] = [:]
         var expectedBytesPerFile: [String: Int64] = [:]
-        let realtimeWindowSeconds: TimeInterval = 3.0
-        var throughputSamples: [(time: Date, bytes: Int64)] = []
-
-        func recordTransfer(_ bytes: Int64) {
-            guard bytes > 0 else { return }
-            let now = Date()
-            throughputSamples.append((time: now, bytes: bytes))
-            let cutoff = now.addingTimeInterval(-realtimeWindowSeconds)
-            throughputSamples.removeAll { $0.time < cutoff }
-        }
-
-        func realtimeSpeed() -> Double {
-            guard !throughputSamples.isEmpty else { return 0 }
-            let now = Date()
-            let cutoff = now.addingTimeInterval(-realtimeWindowSeconds)
-            throughputSamples.removeAll { $0.time < cutoff }
-            guard let firstTime = throughputSamples.first?.time else { return 0 }
-            let bytes = throughputSamples.reduce(Int64(0)) { $0 + $1.bytes }
-            let span = max(0.1, now.timeIntervalSince(firstTime))
-            return Double(bytes) / span
-        }
         
         // Ensure clean destination
         if !FileManager.default.fileExists(atPath: destinationDir.path) {
@@ -409,10 +632,11 @@ public actor ModelDownloader {
         
         let downloadItems = Array(zip(model.requiredFileNames, model.allDownloadURLs))
 
+        var currentHfToken: String? = nil // Always attempt unauthenticated download first
         for (fileName, fileURL) in downloadItems {
             
             let destinationFileURL = destinationDir.appendingPathComponent(fileName)
-            let expectedSize = await remoteFileSize(fileURL: fileURL, hfToken: hfToken)
+            var expectedSize = await remoteFileSize(fileURL: fileURL, hfToken: hfToken)
             if let expectedSize {
                 expectedBytesPerFile[fileName] = expectedSize
             }
@@ -426,8 +650,7 @@ public actor ModelDownloader {
                     if let expectedSize, expectedSize == fileSize {
                         downloadedBytesPerFile[fileName] = fileSize
                         let currentTotal = downloadedBytesPerFile.values.reduce(0, +)
-                        let speed = realtimeSpeed()
-                        onProgress(DownloadUpdate(bytesDownloaded: currentTotal, totalBytes: totalSize, speedBytesPerSecond: speed))
+                        onProgress(DownloadUpdate(bytesDownloaded: currentTotal, totalBytes: totalSize, speedBytesPerSecond: 0))
                         continue
                     }
                 }
@@ -440,37 +663,65 @@ public actor ModelDownloader {
 
             while !finishedFile {
                 do {
-                    var existingBytes = localFileSize(at: destinationFileURL)
+                    let existingBytes = localFileSize(at: destinationFileURL)
                     var request = URLRequest(url: fileURL, cachePolicy: .reloadIgnoringLocalCacheData)
-                    if let token = hfToken, !token.isEmpty {
+                    if let token = currentHfToken, !token.isEmpty {
                         request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                     }
                     if existingBytes > 0 {
                         request.addValue("bytes=\(existingBytes)-", forHTTPHeaderField: "Range")
                     }
 
-                    let (bytes, response) = try await urlSession.bytes(for: request)
-                    guard let httpResponse = response as? HTTPURLResponse else {
-                        throw NSError(domain: "ModelDownloader", code: -1, userInfo: [NSLocalizedDescriptionKey: "No Response"])
-                    }
+                    let completedBytes = downloadedBytesPerFile
+                        .filter { $0.key != fileName }
+                        .values
+                        .reduce(0, +)
+                    let downloader = ChunkedFileDownloader(
+                        destinationURL: destinationFileURL,
+                        requestedOffset: existingBytes,
+                        progressHandler: { fileBytes, speed in
+                            onProgress(
+                                DownloadUpdate(
+                                    bytesDownloaded: completedBytes + fileBytes,
+                                    totalBytes: totalSize,
+                                    speedBytesPerSecond: speed
+                                )
+                            )
+                        }
+                    )
+                    let result = try await downloader.start(
+                        request: request,
+                        configuration: urlSession.configuration
+                    )
 
                     // Critical 404/403 Handling
-                    if !(200...299).contains(httpResponse.statusCode) {
-                        if httpResponse.statusCode == 416 {
-                            let rangeHeaderTotal = totalSizeFromContentRange(httpResponse.value(forHTTPHeaderField: "Content-Range"))
+                    if !(200...299).contains(result.statusCode) {
+                        // If auth failed (401 or 403) on unauthenticated attempt, retry with token for gated models
+                        if (result.statusCode == 401 || result.statusCode == 403) && currentHfToken == nil, let hfToken = hfToken, !hfToken.isEmpty {
+                            currentHfToken = hfToken
+                            if expectedSize == nil {
+                                expectedSize = await remoteFileSize(fileURL: fileURL, hfToken: currentHfToken)
+                                if let expectedSize {
+                                    expectedBytesPerFile[fileName] = expectedSize
+                                }
+                            }
+                            continue
+                        }
+
+                        if result.statusCode == 416 {
+                            let rangeHeaderTotal = totalSizeFromContentRange(result.contentRange)
                             let refreshedExpected: Int64?
                             if let expectedSize {
                                 refreshedExpected = expectedSize
                             } else if let rangeHeaderTotal {
                                 refreshedExpected = rangeHeaderTotal
                             } else {
-                                refreshedExpected = await remoteFileSize(fileURL: fileURL, hfToken: hfToken)
+                                refreshedExpected = await remoteFileSize(fileURL: fileURL, hfToken: currentHfToken)
                             }
                             if let refreshedExpected, existingBytes >= refreshedExpected {
                                 downloadedBytesPerFile[fileName] = refreshedExpected
                                 let currentTotal = downloadedBytesPerFile.values.reduce(0, +)
-                                let speed = realtimeSpeed()
-                                onProgress(DownloadUpdate(bytesDownloaded: currentTotal, totalBytes: totalSize, speedBytesPerSecond: speed))
+                                onProgress(DownloadUpdate(bytesDownloaded: currentTotal, totalBytes: totalSize, speedBytesPerSecond: 0))
                                 finishedFile = true
                                 break
                             }
@@ -485,67 +736,18 @@ public actor ModelDownloader {
                         }
 
                         // Ignore missing optional files.
-                        if httpResponse.statusCode == 404 && optionalModelFiles.contains(fileName) {
+                        if result.statusCode == 404 && optionalModelFiles.contains(fileName) {
                             finishedFile = true
                             break
                         }
 
-                        let reason = HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                        throw NSError(domain: "ModelDownloader", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode): \(reason)"])
+                        let reason = HTTPURLResponse.localizedString(forStatusCode: result.statusCode)
+                        throw NSError(domain: "ModelDownloader", code: result.statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP \(result.statusCode): \(reason)"])
                     }
 
-                    // Efficient Buffered Write with resume support.
-                    // 206 means server accepted Range and we should append.
-                    // 200 means full content, so restart file from zero.
-                    if !FileManager.default.fileExists(atPath: destinationFileURL.path) {
-                        FileManager.default.createFile(atPath: destinationFileURL.path, contents: nil)
-                    }
-                    if existingBytes > 0 && httpResponse.statusCode == 200 {
-                        try? FileManager.default.removeItem(at: destinationFileURL)
-                        FileManager.default.createFile(atPath: destinationFileURL.path, contents: nil)
-                        existingBytes = 0
-                    }
-                    let fileHandle = try FileHandle(forWritingTo: destinationFileURL)
-                    defer { try? fileHandle.close() }
-                    if existingBytes > 0 {
-                        try fileHandle.seekToEnd()
-                    } else {
-                        try fileHandle.truncate(atOffset: 0)
-                    }
-
-                    var byteCountPerFile: Int64 = existingBytes
-                    var buffer = Data()
-                    let chunkSize = 64 * 1024 // 64KB buffer
-
-                    for try await byte in bytes {
-                        buffer.append(byte)
-                        byteCountPerFile += 1
-
-                        if buffer.count >= chunkSize {
-                            let flushedBytes = Int64(buffer.count)
-                            try fileHandle.write(contentsOf: buffer)
-                            buffer.removeAll(keepingCapacity: true)
-                            recordTransfer(flushedBytes)
-
-                            // Periodic Progress Update
-                            downloadedBytesPerFile[fileName] = byteCountPerFile
-                            let currentTotal = downloadedBytesPerFile.values.reduce(0, +)
-                            let speed = realtimeSpeed()
-                            onProgress(DownloadUpdate(bytesDownloaded: currentTotal, totalBytes: totalSize, speedBytesPerSecond: speed))
-                        }
-                    }
-
-                    if !buffer.isEmpty {
-                        let flushedBytes = Int64(buffer.count)
-                        try fileHandle.write(contentsOf: buffer)
-                        buffer.removeAll()
-                        recordTransfer(flushedBytes)
-                    }
-
-                    downloadedBytesPerFile[fileName] = byteCountPerFile
+                    downloadedBytesPerFile[fileName] = result.fileBytes
                     let currentTotal = downloadedBytesPerFile.values.reduce(0, +)
-                    let speed = realtimeSpeed()
-                    onProgress(DownloadUpdate(bytesDownloaded: currentTotal, totalBytes: totalSize, speedBytesPerSecond: speed))
+                    onProgress(DownloadUpdate(bytesDownloaded: currentTotal, totalBytes: totalSize, speedBytesPerSecond: 0))
                     finishedFile = true
                 } catch let error as URLError where error.code.isTransientDownloadFailure && attempt < maxRetries {
                     attempt += 1
@@ -670,12 +872,12 @@ public actor ModelDownloader {
         var attempt = 0
         var downloadComplete = false
         var downloadedBytes: Int64 = 0
-
+        var currentHfToken: String? = nil // Try unauthenticated first
         while !downloadComplete {
             do {
                 var existingBytes = localFileSize(at: tempZipURL)
                 var request = URLRequest(url: zipURL, cachePolicy: .reloadIgnoringLocalCacheData)
-                if let token = hfToken, !token.isEmpty {
+                if let token = currentHfToken, !token.isEmpty {
                     request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }
                 if existingBytes > 0 {
@@ -688,6 +890,10 @@ public actor ModelDownloader {
                 }
 
                 if !(200...299).contains(httpResponse.statusCode) {
+                    if (httpResponse.statusCode == 401 || httpResponse.statusCode == 403) && currentHfToken == nil, let hfToken = hfToken, !hfToken.isEmpty {
+                        currentHfToken = hfToken
+                        continue
+                    }
                     if httpResponse.statusCode == 416 {
                         // Already complete
                         existingBytes = localFileSize(at: tempZipURL)

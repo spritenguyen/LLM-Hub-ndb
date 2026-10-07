@@ -2,10 +2,10 @@ package com.llmhub.llmhub.inference
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import com.llmhub.llmhub.data.LLMModel
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.flow.Flow
-import javax.inject.Inject
 
 /**
  * Unified Inference Service that routes requests to the appropriate backend Service
@@ -13,10 +13,14 @@ import javax.inject.Inject
  */
 class UnifiedInferenceService(private val context: Context) : InferenceService {
 
-    private val mediaPipeService = MediaPipeInferenceService(context)
-    private val liteRtLmService = LiteRtLmInferenceService(context)
-    private val onnxService = OnnxInferenceService(context)
-    private val geniexService = GeniexInferenceService(context)
+    companion object {
+        private const val TAG = "UnifiedInferenceService"
+    }
+
+    private val mediaPipeService by lazy { MediaPipeInferenceService(context) }
+    private val liteRtLmService by lazy { LiteRtLmInferenceService(context) }
+    private val onnxService by lazy { OnnxInferenceService(context) }
+    private val llamaCppService by lazy { LlamaCppInferenceService(context) }
     
     private var currentService: InferenceService = mediaPipeService
     private var currentModel: LLMModel? = null
@@ -35,22 +39,32 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
     ): Boolean {
         val modelPrefs = com.llmhub.llmhub.data.ModelPreferences(context)
         val cfg = modelPrefs.getModelConfig(model.name)
-        val finalBackend = if (cfg?.backend != null) {
+        val finalBackend = if (model.modelFormat == "gguf" && preferredBackend != null) {
+            preferredBackend
+        } else if (cfg?.backend != null) {
             try { LlmInference.Backend.valueOf(cfg.backend) } catch (_: Exception) { preferredBackend }
+        } else if (model.modelFormat == "gguf") {
+            // No per-model choice or caller override: GGUF starts on CPU.
+            LlmInference.Backend.CPU
         } else {
             preferredBackend
         }
-        val finalDeviceId = cfg?.deviceId ?: deviceId
+        // For GGUF, a caller-provided backend/device pair is a single selection:
+        // GPU with a null device means GPU, not a saved NPU device from an older config.
+        val finalDeviceId = if (model.modelFormat == "gguf" && preferredBackend != null) {
+            deviceId
+        } else if (model.modelFormat == "gguf") {
+            cfg?.deviceId
+        } else {
+            cfg?.deviceId ?: deviceId
+        }
         val finalDisableVision = disableVision
         val finalDisableAudio = disableAudio
 
-        if (model.modelFormat == "gguf" && (geniexService as? com.llmhub.llmhub.inference.GeniexInferenceService)?.isAvailable() != true) {
-            throw AllBackendsFailedException("GGUF models require the GenieX SDK which is not available on this device")
-        }
         val isGemma4 = model.name.contains("Gemma-4", ignoreCase = true)
         val targetService = when (model.modelFormat) {
             "onnx" -> onnxService
-            "gguf" -> geniexService
+            "gguf" -> llamaCppService
             "litertlm" -> if (isGemma4 || model.source == "Custom") liteRtLmService else mediaPipeService
             else -> mediaPipeService
         }
@@ -59,11 +73,22 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
         if (currentService == targetService) {
             val loaded = currentService.getCurrentlyLoadedModel()
             val currentBackend = currentService.getCurrentlyLoadedBackend()
-            if (loaded?.name == model.name && 
-                (finalBackend == null || finalBackend == currentBackend) &&
-                finalDisableVision == isVisionDisabled &&
+            val usingLlamaCppFallback = currentService === llamaCppService
+            val backendMatches = (finalBackend == null || finalBackend == currentBackend) &&
+                (!usingLlamaCppFallback || finalDeviceId == llamaCppService.getCurrentlyLoadedDeviceId())
+            val visionMatches = finalDisableVision == isVisionDisabled
+            val audioMatches = usingLlamaCppFallback ||
                 finalDisableAudio == isAudioDisabled
+            if (loaded?.name == model.name &&
+                backendMatches &&
+                visionMatches &&
+                audioMatches
             ) {
+                Log.d(
+                    "UnifiedInferenceService",
+                    "Reusing already-loaded '${model.name}' with " +
+                        if (usingLlamaCppFallback) "llama.cpp" else "current backend",
+                )
                 currentModel = model
                 updateAgentTools(model)
                 return true
@@ -75,24 +100,30 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
             currentService.unloadModel()
         }
 
-        currentService = targetService
-        currentModel = model
-        
         try {
-            val success = currentService.loadModel(model, finalBackend, finalDisableVision, finalDisableAudio, finalDeviceId)
+            val loadedService = if (targetService.loadModel(
+                    model,
+                    finalBackend,
+                    finalDisableVision,
+                    finalDisableAudio,
+                    finalDeviceId,
+                )) targetService else null
+            val success = loadedService != null
             if (!success) {
                 currentModel = null
-                throw AllBackendsFailedException("Backend ${currentService.javaClass.simpleName} failed to load model '${model.name}'")
+                throw AllBackendsFailedException("All compatible backends failed to load model '${model.name}'")
             }
-            isVisionDisabled = finalDisableVision
-            isAudioDisabled = finalDisableAudio
+            currentService = loadedService
+            currentModel = model
+            isVisionDisabled = loadedService.isVisionCurrentlyDisabled()
+            isAudioDisabled = loadedService.isAudioCurrentlyDisabled()
             updateAgentTools(model)
             return true
         } catch (e: AllBackendsFailedException) {
             currentModel = null
             throw e
         } catch (e: Exception) {
-            android.util.Log.e("UnifiedInferenceService", "Service ${currentService.javaClass.simpleName} failed to load model '${model.name}'", e)
+            Log.e("UnifiedInferenceService", "Failed to load model '${model.name}'", e)
             currentModel = null
             throw AllBackendsFailedException("Failed to load model '${model.name}': ${e.message}")
         }
@@ -131,9 +162,7 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
         mediaPipeService.onCleared()
         liteRtLmService.onCleared()
         onnxService.onCleared()
-        if ((geniexService as? com.llmhub.llmhub.inference.GeniexInferenceService)?.isAvailable() == true) {
-            geniexService.onCleared()
-        }
+        llamaCppService.onCleared()
     }
 
     override fun getCurrentlyLoadedModel(): LLMModel? {
@@ -156,9 +185,7 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
         mediaPipeService.setGenerationParameters(maxTokens, topK, topP, temperature, nGpuLayers, enableThinking, contextWindow)
         liteRtLmService.setGenerationParameters(maxTokens, topK, topP, temperature, nGpuLayers, enableThinking, contextWindow)
         onnxService.setGenerationParameters(maxTokens, topK, topP, temperature, nGpuLayers, enableThinking, contextWindow)
-        if ((geniexService as? com.llmhub.llmhub.inference.GeniexInferenceService)?.isAvailable() == true) {
-            geniexService.setGenerationParameters(maxTokens, topK, topP, temperature, nGpuLayers, enableThinking, contextWindow)
-        }
+        llamaCppService.setGenerationParameters(maxTokens, topK, topP, temperature, nGpuLayers, enableThinking, contextWindow)
     }
 
     override fun isVisionCurrentlyDisabled(): Boolean {
@@ -180,7 +207,7 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
     override fun getEffectiveMaxTokens(model: LLMModel): Int {
         return when (model.modelFormat) {
             "onnx" -> onnxService.getEffectiveMaxTokens(model)
-            "gguf" -> if ((geniexService as? com.llmhub.llmhub.inference.GeniexInferenceService)?.isAvailable() == true) geniexService.getEffectiveMaxTokens(model) else mediaPipeService.getEffectiveMaxTokens(model)
+            "gguf" -> llamaCppService.getEffectiveMaxTokens(model)
             "litertlm" -> liteRtLmService.getEffectiveMaxTokens(model)
             else -> mediaPipeService.getEffectiveMaxTokens(model)
         }
@@ -199,7 +226,7 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
     }
 
     private fun updateAgentTools(model: LLMModel) {
-        if (agentToolsEnabled && model.modelFormat == "litertlm" && model.name.contains("Gemma-4", ignoreCase = true)) {
+        if (agentToolsEnabled && model.modelFormat == "litertlm") {
             liteRtLmService.setAgentTools(ChatAgentSkillsTools(context))
         } else {
             liteRtLmService.setAgentTools(null)

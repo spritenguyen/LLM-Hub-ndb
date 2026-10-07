@@ -72,12 +72,12 @@
     <string name="github_repository">مخزن GitHub</string>
     <string name="acknowledgments">قدردانی</string>
     <string name="acknowledgments_text">از Google، Meta، Microsoft، IBM و جامعه HuggingFace برای ارائه مدل‌های شگفت‌انگیز LLM که این برنامه را قدرت می‌بخشند، به‌طور ویژه قدردانی می‌شود. این پروژه همچنین بر کار فوق‌العاده جامعه توسعه‌دهندگان اندروید و اکوسیستم متن‌باز تکیه دارد.</string>
-    <string name="sd_models_credit">مدل‌های تولید تصویر توسط پیاده‌سازی‌های Stable Diffusion از xororz با استفاده از بکندهای Qualcomm QNN (NPU) و Alibaba MNN (CPU) نیرو می‌گیرند.</string>
+    <string name="sd_models_credit">مدل‌های تولید تصویر توسط پیاده‌سازی‌های Stable Diffusion از xororz با استفاده از بکندهای Qualcomm QNN (NPU) و CPU نیرو می‌گیرند.</string>
     <string name="nexa_sdk_credit">استنتاج مدل‌های GGUF توسط Nexa SDK نیرو می‌گیرد.</string>
     <string name="ai_thinking">هوش مصنوعی در حال فکر کردن…</string>
     <string name="thinking_label">تفکر</string>
     <string name="thinking_tokens">تفکر (%1$d توکن)</string>
-    <string name="version_number">نسخه 3.8.3</string>
+    <string name="version_number">نسخه 4.4.2</string>
     <string name="app_version">نسخه برنامه</string>
 
     <!-- Terms of Service (Short titles translated; body kept concise translation) -->
@@ -411,6 +411,7 @@
     <string name="supports_vision">پشتیبانی از بینایی</string>
     <string name="supports_audio">پشتیبانی از صوت</string>
     <string name="supports_gpu">پشتیبانی از GPU</string>
+    <string name="supports_mtp">پشتیبانی از MTP</string>
     <string name="model_format">قالب مدل</string>
     <string name="context_window_size">اندازه پنجره زمینه</string>
     <string name="import_model">وارد کردن مدل</string>
@@ -475,7 +476,8 @@
     <string name="translator_auto_detect">تشخیص خودکار</string>
     <string name="translator_translate">ترجمه</string>
     <string name="translator_result">ترجمه</string>
-    <string name="translator_requires_gemma3n">این ویژگی به یک مدل Gemma-3n یا Gemma-4 E2B/E4B نیاز دارد. لطفاً یکی را از صفحه مدل‌ها دانلود کنید.</string>
+    <string name="translator_requires_gemma3n">هر مدل LLM می‌تواند برای ترجمه استفاده شود. مدل‌های Gemma 4 برای بهترین عملکرد چندزبانه توصیه می‌شوند.</string>
+    <string name="translator_load_model_desc">هر مدل LLM را برای شروع ترجمه دانلود کنید. مدل‌های Gemma 4 برای بهترین عملکرد چندزبانه توصیه می‌شوند.</string>
 
     <!-- Transcriber Screen -->
     <string name="transcriber_title">رونویس‌گر آفلاین</string>
@@ -565,6 +567,7 @@
     <string name="lang_bulgarian">بلغاری</string>
     <string name="lang_burmese">برمه‌ای</string>
     <string name="lang_catalan">کاتالان</string>
+    <string name="lang_central_kurdish">کردی مرکزی (سورانی)</string>
     <string name="lang_chinese">چینی (ساده‌شده)</string>
     <string name="lang_chinese_traditional">چینی (سنتی)</string>
     <string name="lang_croatian">کرواتی</string>
@@ -808,9 +811,10 @@
     <!-- Premium / IAP -->
     <string name="premium_title">LLM Hub Premium مادام‌العمر</string>
     <string name="premium_subtitle">تجربه کامل را باز کنید</string>
-    <string name="premium_feature_no_ads">بدون تبلیغات، هرگز</string>
     <string name="premium_feature_vibe_coder">VibeCoder – مولد کد هوش مصنوعی</string>
     <string name="premium_feature_image_gen">مولد تصویر – هنر هوش مصنوعی روی دستگاه</string>
+    <string name="premium_feature_creaitors">creAItors – ایجاد همراهان هوش مصنوعی</string>
+    <string name="premium_feature_vibevoice">VibeVoice – چت صوتی بدون دست هوش مصنوعی</string>
     <string name="premium_feature_tts">خواندن خودکار متن به گفتار</string>
     <string name="premium_feature_import_models">وارد کردن مدل‌های خارجی</string>
     <string name="premium_feature_web_search">جستجوی وب – نتایج زنده اینترنتی</string>
@@ -828,10 +832,6 @@
     <string name="premium_restore_success">خرید با موفقیت بازیابی شد!</string>
     <string name="premium_restore_nothing">هیچ خرید قبلی یافت نشد.</string>
     <string name="premium_go_premium">رفتن به Premium</string>
-
-    <!-- Privacy &amp; Ads consent -->
-    <string name="privacy_ads_title">حریم خصوصی و تبلیغات</string>
-    <string name="privacy_ads_subtitle">مدیریت شخصی‌سازی تبلیغات و انتخاب‌های رضایت</string>
     <string name="export">صادر کردن</string>
     <string name="home_section_tools">ابزارها</string>
     <string name="home_section_utilities">ابزارهای کمکی</string>
@@ -883,7 +883,128 @@
     <string name="gemma_voice_option">Gemma</string>
         <string name="asr_model_backend"></string>
     <string name="llm_model_backend">بک‌اند مدل LLM</string>
+    <!-- Agent Feature -->
+    <string name="feature_agent">دستیار</string>
+    <string name="feature_agent_desc">دستیار هوش مصنوعی با ابزارها و اقدامات</string>
+    <string name="premium_feature_agent">دستیار – هوش مصنوعی با ابزارها و اقدامات</string>
+    <string name="agent_title">دستیار</string>
+    <string name="agent_subtitle">از من هر چیزی بپرس — می‌توانم جستجو، نقشه‌کشی، تقویم و بیشتر انجام دهم</string>
+    <string name="agent_input_placeholder">از دستیارت بپرس…</string>
+    <string name="agent_voice_mode_system">سیستم</string>
+    <string name="agent_voice_mode_whisper">Whisper</string>
+    <string name="agent_voice_mode_gemma">Gemma</string>
+    <string name="agent_tool_running">در حال اجرا: %1$s</string>
+    <string name="agent_tool_success">انجام شد</string>
+    <string name="agent_tool_failed">ناموفق</string>
+    <string name="agent_tool_confirm_title">اجازه به اقدام؟</string>
+    <string name="agent_tool_confirm_body">دستیار می‌خواهد: %1$s</string>
+    <string name="agent_tool_approve">اجازه</string>
+    <string name="agent_tool_deny">رد</string>
+    <string name="agent_no_model">لطفاً یک مدل دانلود کنید تا از دستیار استفاده کنید</string>
+    <string name="agent_map_expand">نمایش نقشه کامل</string>
+    <string name="agent_settings_voice_mode">حالت ورودی صوتی</string>
+    <string name="agent_settings_tools">ابزارهای فعال</string>
+    <string name="agent_termux_toggle">فعال‌سازی دستورات Termux (پیشرفته)</string>
+    <string name="agent_termux_confirm">اجرای دستور: %1$s</string>
+    <string name="agent_calendar_confirm">ایجاد رویداد: %1$s</string>
+    <string name="agent_shortcut_confirm">اجرای میانبر: %1$s</string>
+    <string name="agent_welcome_message">سلام! من عامل هوش مصنوعی شما هستم. می‌توانم در وب جستجو کنم، نقشه‌ها را نشان دهم، رویدادهای تقویم را مدیریت کنم، آب و هوا را بررسی کنم، هشدارها را تنظیم کنم، پیام بفرستم و هش‌ها را محاسبه کنم. امروز چگونه می‌توانم به شما کمک کنم؟</string>
+    <string name="agent_no_model_android">برای استفاده از عامل، ابتدا یک مدل GGUF یا LiteRT-LM دانلود کنید</string>
+    <string name="agent_no_model_ios">لطفاً ابتدا یک مدل دانلود کنید تا از عامل استفاده کنید</string>
+    <string name="open_maps">باز کردن نقشه</string>
+    <string name="agent_processing_tool">عامل در حال پردازش ابزار است...</string>
+    <string name="agent_termux_guide_title">راهنمای تنظیمات Termux</string>
+    <string name="agent_termux_guide_desc">در Termux، مجوز اجرای برنامه شخص ثالث را فعال کنید:</string>
+    <string name="agent_termux_cmd_copied">دستور در حافظه پنهان کپی شد</string>
+    <string name="agent_termux_pending_approval">نیازمند تایید</string>
+    <string name="agent_termux_run_cmd">اجرای دستور</string>
+    <string name="agent_termux_cancel_cmd">لغو</string>
+    <string name="agent_termux_cancelled">لغو شده توسط کاربر</string>
+
+    <!-- Text to Speech Feature -->
+    <string name="feature_text_to_speech">تبدیل متن به گفتار</string>
+    <string name="feature_text_to_speech_desc">خواند متن با صدای بلند با استفاده از سیستم یا صداهای Kokoro TTS</string>
+    <string name="tts_feature_title">تبدیل متن به گفتار</string>
+    <string name="tts_feature_subtitle">متن را کپی و پیست کنید تا با موتور گفتار و تنظیمات صدای انتخابی شما خوانده شود.</string>
+    <string name="tts_input_hint">متن را اینجا وارد یا پیست کنید...</string>
+    <string name="tts_speak_button">بخوان</string>
+    <string name="tts_stop_button">توقف خواندن</string>
+    <string name="tts_paste_button">جای‌گذاری متن</string>
+    <string name="tts_clear_button">پاک‌سازی</string>
+    <string name="tts_speaking_status">در حال خواندن با صدای بلند…</string>
+    <string name="tts_idle_status">آماده برای خواندن</string>
+    <string name="tts_empty_input_warning">لطفاً ابتدا متنی را وارد یا جای‌گذاری کنید.</string>
+    <string name="tts_engine_system">گفتار پیش‌فرض سیستم</string>
+    <string name="tts_engine_kokoro">Kokoro TTS</string>
+    <string name="tts_current_voice">صدا: %1$s</string>
+    <string name="tts_word_count">%1$d کلمه</string>
+    <string name="search_huggingface">جستجو در Hugging Face</string>
+    <string name="search_huggingface_placeholder">جستجوی مدل‌های GGUF یا LiteRT-LM</string>
+    <string name="huggingface_results">نتایج Hugging Face</string>
+    <string name="download_vision_projector">دانلود پروژکتور بینایی</string>
+    <string name="huggingface_search_failed">جستجوی Hugging Face ناموفق بود</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="feature_music_generator">سازنده موسیقی</string>
+    <string name="feature_music_generator_desc">تولید موسیقی و جلوه‌های صوتی روی دستگاه</string>
+    <string name="music_generation_models">مدل‌های تولید موسیقی</string>
+    <string name="music_generation_models_description">مدل‌های هوش مصنوعی آفلاین برای ساخت قطعات موسیقی و افکت‌های صوتی.</string>
+    <string name="music_prompt_label">توضیحات موسیقی</string>
+    <string name="prompt_hint_music">موسیقی یا افکت صوتی مورد نظر خود را توصیف کنید...</string>
+    <string name="music_style_presets">سبک‌های پیش‌فرض</string>
+    <string name="music_tier_select">سطح تولیدکننده</string>
+    <string name="music_duration_label">مدت زمان</string>
+    <string name="generate_music">تولید موسیقی</string>
+    <string name="generating_music">در حال تولید موسیقی...</string>
+    <string name="music_prompt_empty_warning">لطفاً توضیحی برای موسیقی مورد نظر وارد کنید.</string>
+    <string name="music_generated_success">موسیقی با موفقیت تولید شد!</string>
+    <string name="music_saved_toast">فایل صوتی در کتابخانه ذخیره شد!</string>
+    <string name="music_generator_download_model">ابتدا مدل را دانلود کنید</string>
+    <string name="music_generator_download_model_desc">یک مدل تولید موسیقی را از صفحه مدل‌ها دانلود کنید تا شروع به تولید موسیقی کنید.</string>
+
+    <!-- MCP Agent -->
+    <string name="agent_mcp_settings">تنظیمات MCP</string>
+    <string name="agent_mcp_title">ابزارهای MCP</string>
+    <string name="agent_mcp_description">به سرورهای MCP متصل شوید و به عامل اجازه دهید از ابزارهای آن‌ها استفاده کند.</string>
+    <string name="agent_mcp_transport">انتقال</string>
+    <string name="agent_mcp_termux_stdio">stdio ترموکس</string>
+    <string name="agent_mcp_remote_http">HTTP راه‌دور</string>
+    <string name="agent_mcp_command">فرمان سرور MCP</string>
+    <string name="agent_mcp_termux_help">سرور MCP را از طریق stdio ترموکس اجرا می‌کند. ابتدا بسته‌های لازم را نصب کنید.</string>
+    <string name="agent_mcp_server_url">نشانی سرور</string>
+    <string name="agent_mcp_bearer_token">توکن Bearer (اختیاری)</string>
+    <string name="agent_mcp_approval_notice">هر فراخوانی ابزار MCP پیش از اجرا به تأیید شما نیاز دارد.</string>
+    <string name="agent_mcp_connecting">در حال اتصال…</string>
+    <string name="agent_mcp_connected_tools">%1$d ابزار متصل شد</string>
+    <string name="agent_mcp_error">خطای MCP: %1$s</string>
+    <string name="agent_mcp_connect">اتصال</string>
+    <string name="agent_mcp_disconnect">قطع اتصال</string>
+    <string name="agent_mcp_tool_request">ابزار MCP: %1$s</string>
+    <string name="agent_mcp_allow">اجازه</string>
+    <string name="agent_mcp_deny">رد</string>
+    <string name="agent_mcp_approval_required">تأیید لازم است</string>
+    <string name="agent_mcp_denied">توسط کاربر رد شد</string>
+    <string name="agent_mcp_status">وضعیت</string>
+    <string name="agent_termux_tool_title">فرمان پوسته ترموکس</string>
+    <string name="agent_mcp_termux_permission_required">در تنظیمات Android > برنامه‌ها > LLM Hub > مجوزها > مجوزهای اضافی، گزینه «اجرای فرمان‌ها در محیط Termux» را برای LLM Hub مجاز کنید.</string>
+    <string name="agent_mcp_termux_not_installed">Termux نسخه 0.109 یا جدیدتر لازم است.</string>
+    <string name="agent_mcp_termux_timed_out">Termux پیش از پایان مهلت هیچ نتیجه‌ای برنگرداند.</string>
+    <string name="agent_mcp_termux_run_command_unavailable">نسخه Google Play ترموکس از فرمان‌های خارجی پشتیبانی نمی‌کند. برای stdio از نسخه F-Droid/GitHub ترموکس استفاده کنید یا HTTP راه دور را انتخاب کنید.</string>
+    <string name="gguf_engine">موتور GGUF</string>
+    <string name="gguf_engine_geniex_default">GenieX (پیش‌فرض)</string>
+    <string name="gguf_engine_llama_cpp">llama.cpp</string>
+    <string name="gguf_engine_crash_title">موتور GGUF متوقف شد</string>
+    <string name="gguf_engine_crash_message">GenieX هنگام بارگذاری مدل GGUF متوقف شد. موتور GGUF را در تنظیمات تغییر دهید.</string>
+    <string name="gguf_engine_open_settings">باز کردن تنظیمات</string>
+    <!-- Hugging Face Token -->
+    <string name="hf_token_title">توکن Hugging Face</string>
+    <string name="hf_token_subtitle">توکن دسترسی شخصی برای دانلود مدل‌ها</string>
+    <string name="hf_token_dialog_title">توکن دسترسی Hugging Face</string>
+    <string name="hf_token_explanation">اگر توکن پیش‌فرض کار نکرد، به محدودیت نرخ رسید یا هنگام دانلود مدل‌های دارای مجوز تایید شده، توکن خواندن شخصی خود را از huggingface.co/settings/tokens وارد کنید.</string>
+    <string name="hf_token_placeholder">وارد کردن توکن شخصی (hf_...)</string>
+    <string name="hf_token_using_default">در حال استفاده از توکن پیش‌فرض</string>
+    <string name="hf_token_custom_active">توکن سفارشی فعال است</string>
+    <string name="hf_token_clear">بازنشانی به پیش‌فرض</string>
+    <string name="gguf_vulkan_setting">موتور GPU مدل GGUF</string>
+    <string name="crash_recovery_title">برنامه به‌طور غیرمنتظره بسته شد</string>
+    <string name="crash_recovery_message">یک مدل کوچک‌تر بارگیری کنید یا از CPU استفاده کنید.</string>
 </resources>
-
-
-

@@ -74,12 +74,12 @@
     <string name="github_repository">Repository GitHub</string>
     <string name="acknowledgments">Ringraziamenti</string>
     <string name="acknowledgments_text">Un ringraziamento speciale a Google, Meta, Microsoft, IBM e alla comunità HuggingFace per aver fornito gli incredibili modelli LLM che alimentano questa applicazione. Questo progetto si basa anche sull\'incredibile lavoro della comunità di sviluppo Android e dell\'ecosistema open source.</string>
-    <string name="sd_models_credit">I modelli di generazione di immagini sono alimentati dalle implementazioni Stable Diffusion di xororz utilizzando backend Qualcomm QNN (NPU) e Alibaba MNN (CPU).</string>
+    <string name="sd_models_credit">I modelli di generazione di immagini sono alimentati dalle implementazioni Stable Diffusion di xororz utilizzando backend Qualcomm QNN (NPU) e CPU.</string>
     <string name="nexa_sdk_credit">L\'inferenza dei modelli GGUF è fornita da Nexa SDK.</string>
     <string name="ai_thinking">L\'IA sta pensando...</string>
     <string name="thinking_label">Pensiero</string>
     <string name="thinking_tokens">Pensiero (%1$d token)</string>
-    <string name="version_number">Versione 3.8.3</string>
+    <string name="version_number">Versione 4.4.2</string>
     <string name="app_version">Versione App</string>
     
     <!-- Terms of Service -->
@@ -411,6 +411,7 @@
     <string name="supports_vision">Supporta Visione</string>
     <string name="supports_audio">Supporta Audio</string>
     <string name="supports_gpu">Supporta GPU</string>
+    <string name="supports_mtp">Supporta MTP</string>
     <string name="model_format">Formato del Modello</string>
     <string name="context_window_size">Dimensione Finestra di Contesto</string>
     <string name="import_model">Importa Modello</string>
@@ -477,7 +478,8 @@
     <string name="translator_auto_detect">Rilevamento automatico</string>
     <string name="translator_translate">Traduci</string>
     <string name="translator_result">Traduzione</string>
-    <string name="translator_requires_gemma3n">Questa funzionalità richiede un modello Gemma-3n o Gemma-4 E2B/E4B. Per favore scaricane uno dalla schermata Modelli.</string>
+    <string name="translator_requires_gemma3n">Qualsiasi modello LLM può essere utilizzato per la traduzione. I modelli Gemma 4 sono consigliati per le migliori prestazioni multilingue.</string>
+    <string name="translator_load_model_desc">Scarica qualsiasi modello LLM per iniziare a tradurre. I modelli Gemma 4 sono consigliati per le migliori prestazioni multilingue.</string>
     
     <!-- Transcriber Screen -->
     <string name="transcriber_title">Trascrittore offline</string>
@@ -569,6 +571,7 @@
     <string name="lang_bulgarian">Bulgaro</string>
     <string name="lang_burmese">Birmano</string>
     <string name="lang_catalan">Catalano</string>
+    <string name="lang_central_kurdish">Curdo centrale (sorani)</string>
     <string name="lang_chinese">Cinese (Semplificato)</string>
     <string name="lang_chinese_traditional">Cinese (Tradizionale)</string>
     <string name="lang_croatian">Croato</string>
@@ -802,9 +805,10 @@
     <!-- Premium / IAP -->
     <string name="premium_title">LLM Hub Premium Lifetime</string>
     <string name="premium_subtitle">Sblocca l’esperienza completa</string>
-    <string name="premium_feature_no_ads">Nessuna pubblicità, mai</string>
     <string name="premium_feature_vibe_coder">VibeCoder – Generatore di codice IA</string>
     <string name="premium_feature_image_gen">Generatore di immagini – arte IA sul dispositivo</string>
+    <string name="premium_feature_creaitors">creAItors – genera compagni IA</string>
+    <string name="premium_feature_vibevoice">VibeVoice – chat vocale IA a mani libere</string>
     <string name="premium_feature_tts">Lettura automatica testo-voce</string>
     <string name="premium_feature_import_models">Importa modelli esterni</string>
     <string name="premium_feature_web_search">Ricerca web – risultati live</string>
@@ -822,10 +826,6 @@
     <string name="premium_restore_success">Acquisto ripristinato con successo!</string>
     <string name="premium_restore_nothing">Nessun acquisto precedente trovato.</string>
     <string name="premium_go_premium">Diventa Premium</string>
-
-    <!-- Privacy &amp; Ads consent -->
-    <string name="privacy_ads_title">Privacy e pubblicità</string>
-    <string name="privacy_ads_subtitle">Gestisci la personalizzazione degli annunci e le tue scelte di consenso</string>
     <string name="export">Esporta</string>
     <string name="home_section_tools">Strumenti</string>
     <string name="home_section_utilities">Utilità</string>
@@ -877,7 +877,128 @@
     <string name="gemma_voice_option">Gemma</string>
         <string name="asr_model_backend"></string>
     <string name="llm_model_backend">Backend del modello LLM</string>
+    <!-- Agent Feature -->
+    <string name="feature_agent">Agente</string>
+    <string name="feature_agent_desc">Assistente IA con strumenti e azioni</string>
+    <string name="premium_feature_agent">Agente – IA con strumenti e azioni</string>
+    <string name="agent_title">Agente</string>
+    <string name="agent_subtitle">Chiedimi qualsiasi cosa — posso cercare, mappare, pianificare e altro</string>
+    <string name="agent_input_placeholder">Chiedi al tuo agente…</string>
+    <string name="agent_voice_mode_system">Sistema</string>
+    <string name="agent_voice_mode_whisper">Whisper</string>
+    <string name="agent_voice_mode_gemma">Gemma</string>
+    <string name="agent_tool_running">In esecuzione: %1$s</string>
+    <string name="agent_tool_success">Completato</string>
+    <string name="agent_tool_failed">Fallito</string>
+    <string name="agent_tool_confirm_title">Permettere l\'azione?</string>
+    <string name="agent_tool_confirm_body">L\'agente vuole: %1$s</string>
+    <string name="agent_tool_approve">Consenti</string>
+    <string name="agent_tool_deny">Nega</string>
+    <string name="agent_no_model">Scarica un modello per usare l\'Agente</string>
+    <string name="agent_map_expand">Visualizza mappa completa</string>
+    <string name="agent_settings_voice_mode">Modalità input vocale</string>
+    <string name="agent_settings_tools">Strumenti abilitati</string>
+    <string name="agent_termux_toggle">Abilita comandi Termux (avanzato)</string>
+    <string name="agent_termux_confirm">Esegui comando: %1$s</string>
+    <string name="agent_calendar_confirm">Crea evento: %1$s</string>
+    <string name="agent_shortcut_confirm">Esegui collegamento: %1$s</string>
+    <string name="agent_welcome_message">Ciao! Sono il tuo Agente IA. Posso cercare sul web, mostrare mappe, gestire eventi del calendario, controllare il meteo, impostare sveglie, inviare messaggi e calcolare hash. Come posso aiutarti oggi?</string>
+    <string name="agent_no_model_android">Scarica prima un modello GGUF o LiteRT-LM per usare Agent</string>
+    <string name="agent_no_model_ios">Scarica prima un modello per utilizzare l\'Agente</string>
+    <string name="open_maps">Apri mappe</string>
+    <string name="agent_processing_tool">L’agente sta elaborando lo strumento...</string>
+    <string name="agent_termux_guide_title">Guida alla configurazione di Termux</string>
+    <string name="agent_termux_guide_desc">In Termux, abilita le autorizzazioni per l\'esecuzione di app di terze parti:</string>
+    <string name="agent_termux_cmd_copied">Comando copiato negli appunti</string>
+    <string name="agent_termux_pending_approval">Approvazione richiesta</string>
+    <string name="agent_termux_run_cmd">Esegui comando</string>
+    <string name="agent_termux_cancel_cmd">Annulla</string>
+    <string name="agent_termux_cancelled">Annullato dall\'utente</string>
+
+    <!-- Text to Speech Feature -->
+    <string name="feature_text_to_speech">Sintesi vocale</string>
+    <string name="feature_text_to_speech_desc">Leggi il testo ad alta voce utilizzando il sistema o le voci Kokoro TTS</string>
+    <string name="tts_feature_title">Sintesi vocale</string>
+    <string name="tts_feature_subtitle">Copia e incolla il testo per leggerlo ad alta voce con il motore TTS e le voci configurate.</string>
+    <string name="tts_input_hint">Inserisci o incolla qui il testo...</string>
+    <string name="tts_speak_button">Leggi ad alta voce</string>
+    <string name="tts_stop_button">Interrompi lettura</string>
+    <string name="tts_paste_button">Incolla testo</string>
+    <string name="tts_clear_button">Cancella</string>
+    <string name="tts_speaking_status">Lettura ad alta voce…</string>
+    <string name="tts_idle_status">Pronto per la lettura</string>
+    <string name="tts_empty_input_warning">Inserisci o incolla del testo da leggere.</string>
+    <string name="tts_engine_system">TTS predefinito di sistema</string>
+    <string name="tts_engine_kokoro">Kokoro TTS</string>
+    <string name="tts_current_voice">Voce: %1$s</string>
+    <string name="tts_word_count">%1$d parole</string>
+    <string name="search_huggingface">Cerca in Hugging Face</string>
+    <string name="search_huggingface_placeholder">Cerca modelli GGUF o LiteRT-LM</string>
+    <string name="huggingface_results">Risultati Hugging Face</string>
+    <string name="download_vision_projector">Scarica proiettore visivo</string>
+    <string name="huggingface_search_failed">Ricerca Hugging Face non riuscita</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="feature_music_generator">Generatore di Musica</string>
+    <string name="feature_music_generator_desc">Genera musica ed effetti sonori sul dispositivo</string>
+    <string name="music_generation_models">Modelli di Generazione Musicale</string>
+    <string name="music_generation_models_description">Modelli IA sul dispositivo per la creazione di brani ed effetti sonori.</string>
+    <string name="music_prompt_label">Descrizione della musica</string>
+    <string name="prompt_hint_music">Descrivi la musica o l\'effetto sonoro da generare...</string>
+    <string name="music_style_presets">Stili predefiniti</string>
+    <string name="music_tier_select">Livello del generatore</string>
+    <string name="music_duration_label">Durata</string>
+    <string name="generate_music">Genera Musica</string>
+    <string name="generating_music">Generazione musica in corso...</string>
+    <string name="music_prompt_empty_warning">Inserisci una descrizione per la musica che desideri generare.</string>
+    <string name="music_generated_success">Musica generata con successo!</string>
+    <string name="music_saved_toast">File audio salvato nella libreria locale!</string>
+    <string name="music_generator_download_model">Scarica Prima il Modello</string>
+    <string name="music_generator_download_model_desc">Scarica un modello di generazione musicale dalla schermata Modelli per iniziare.</string>
+
+    <!-- MCP Agent -->
+    <string name="agent_mcp_settings">Impostazioni MCP</string>
+    <string name="agent_mcp_title">Strumenti MCP</string>
+    <string name="agent_mcp_description">Connetti server MCP e consenti all’Agente di usarne gli strumenti.</string>
+    <string name="agent_mcp_transport">Trasporto</string>
+    <string name="agent_mcp_termux_stdio">stdio Termux</string>
+    <string name="agent_mcp_remote_http">HTTP remoto</string>
+    <string name="agent_mcp_command">Comando server MCP</string>
+    <string name="agent_mcp_termux_help">Esegue il server MCP tramite stdio di Termux. Installa prima i pacchetti richiesti.</string>
+    <string name="agent_mcp_server_url">URL del server</string>
+    <string name="agent_mcp_bearer_token">Token Bearer (facoltativo)</string>
+    <string name="agent_mcp_approval_notice">Ogni chiamata a uno strumento MCP richiede la tua approvazione prima dell’esecuzione.</string>
+    <string name="agent_mcp_connecting">Connessione…</string>
+    <string name="agent_mcp_connected_tools">%1$d strumenti connessi</string>
+    <string name="agent_mcp_error">Errore MCP: %1$s</string>
+    <string name="agent_mcp_connect">Connetti</string>
+    <string name="agent_mcp_disconnect">Disconnetti</string>
+    <string name="agent_mcp_tool_request">Strumento MCP: %1$s</string>
+    <string name="agent_mcp_allow">Consenti</string>
+    <string name="agent_mcp_deny">Nega</string>
+    <string name="agent_mcp_approval_required">Approvazione richiesta</string>
+    <string name="agent_mcp_denied">Negato dall’utente</string>
+    <string name="agent_mcp_status">Stato</string>
+    <string name="agent_termux_tool_title">Comando shell Termux</string>
+    <string name="agent_mcp_termux_permission_required">Consenti «Esegui comandi nell’ambiente Termux» per LLM Hub in Impostazioni Android > App > LLM Hub > Autorizzazioni > Autorizzazioni aggiuntive.</string>
+    <string name="agent_mcp_termux_not_installed">È richiesto Termux 0.109 o versione successiva.</string>
+    <string name="agent_mcp_termux_timed_out">Termux non ha restituito risultati prima della scadenza.</string>
+    <string name="agent_mcp_termux_run_command_unavailable">Questa versione Google Play di Termux non supporta i comandi esterni. Usa la versione F-Droid/GitHub di Termux per stdio oppure seleziona HTTP remoto.</string>
+    <string name="gguf_engine">Motore GGUF</string>
+    <string name="gguf_engine_geniex_default">GenieX (predefinito)</string>
+    <string name="gguf_engine_llama_cpp">llama.cpp</string>
+    <string name="gguf_engine_crash_title">Il motore GGUF si è arrestato</string>
+    <string name="gguf_engine_crash_message">GenieX si è arrestato durante il caricamento di un modello GGUF. Prova a cambiare il motore GGUF nelle Impostazioni.</string>
+    <string name="gguf_engine_open_settings">Apri Impostazioni</string>
+    <!-- Hugging Face Token -->
+    <string name="hf_token_title">Token Hugging Face</string>
+    <string name="hf_token_subtitle">Token di accesso personale per scaricare modelli</string>
+    <string name="hf_token_dialog_title">Token di accesso Hugging Face</string>
+    <string name="hf_token_explanation">Se il token predefinito non funziona, supera i limiti di frequenza o per scaricare modelli con licenza accettata, inserisci il tuo token di lettura personale da huggingface.co/settings/tokens.</string>
+    <string name="hf_token_placeholder">Inserisci token personale (hf_...)</string>
+    <string name="hf_token_using_default">Uso del token predefinito</string>
+    <string name="hf_token_custom_active">Token personalizzato attivo</string>
+    <string name="hf_token_clear">Ripristina predefinito</string>
+    <string name="gguf_vulkan_setting">Backend GPU GGUF</string>
+    <string name="crash_recovery_title">App chiusa in modo imprevisto</string>
+    <string name="crash_recovery_message">Prova a caricare un modello più piccolo o a usare la CPU.</string>
 </resources>
-
-
-

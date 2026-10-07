@@ -1,24 +1,6 @@
 {
-  "originHash" : "7fbe85a166a459b0ed06208ca112c06e0cf39fb164bfa5231d564598b8b5d196",
+  "originHash" : "63993648e3e5c0e27b5779c6e9f31dd1d64810694a7baeee7207bbdc421b66e1",
   "pins" : [
-    {
-      "identity" : "alamofire",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Alamofire/Alamofire.git",
-      "state" : {
-        "revision" : "e938f8c66708e7352fc7e3512647fa54255b267a",
-        "version" : "5.11.2"
-      }
-    },
-    {
-      "identity" : "bitbytedata",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tsolomko/BitByteData",
-      "state" : {
-        "revision" : "cdcdc5177ad536cfb11b95c620f926a81014b7fe",
-        "version" : "2.0.4"
-      }
-    },
     {
       "identity" : "ccv",
       "kind" : "remoteSourceControl",
@@ -28,29 +10,11 @@
       }
     },
     {
-      "identity" : "devicekit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/devicekit/DeviceKit.git",
-      "state" : {
-        "revision" : "56b997e8a61707218f9af09f32b2a1d1806fd792",
-        "version" : "5.8.0"
-      }
-    },
-    {
       "identity" : "dflat",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/liuliu/dflat.git",
       "state" : {
         "revision" : "73925e51e4f44add842177a229f9990cb13711ff"
-      }
-    },
-    {
-      "identity" : "files",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/JohnSundell/Files.git",
-      "state" : {
-        "revision" : "e85f2b4a8dfa0f242889f45236f3867d16e40480",
-        "version" : "4.3.0"
       }
     },
     {
@@ -71,12 +35,12 @@
       }
     },
     {
-      "identity" : "ml-stable-diffusion",
+      "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/ml-stable-diffusion",
+      "location" : "https://github.com/ml-explore/mlx-swift.git",
       "state" : {
-        "revision" : "5a170d29cf38e674b80541d7ce22929c6a11cdde",
-        "version" : "1.1.1"
+        "revision" : "0bb916c67f4b9e5c682cbe02a42c701c93ab5021",
+        "version" : "0.31.6"
       }
     },
     {
@@ -85,24 +49,6 @@
       "location" : "https://github.com/liuliu/s4nnc.git",
       "state" : {
         "revision" : "e3a83b351b84a7917fefd28366a3b9417fee3b2e"
-      }
-    },
-    {
-      "identity" : "sentry-cocoa",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/getsentry/sentry-cocoa",
-      "state" : {
-        "revision" : "cf44aa8cb4147f39e698c1f28be0b6b2c89f79d2",
-        "version" : "8.58.2"
-      }
-    },
-    {
-      "identity" : "swcompression",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tsolomko/SWCompression.git",
-      "state" : {
-        "revision" : "390e0b0af8dd19a600005a242a89e570ff482e09",
-        "version" : "4.8.6"
       }
     },
     {
@@ -212,15 +158,6 @@
       }
     },
     {
-      "identity" : "swift-jinja",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/huggingface/swift-jinja.git",
-      "state" : {
-        "revision" : "0aeefadec459ce8e11a333769950fb86183aca43",
-        "version" : "2.3.5"
-      }
-    },
-    {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
@@ -293,24 +230,6 @@
       }
     },
     {
-      "identity" : "swift-package-manager-google-mobile-ads",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/googleads/swift-package-manager-google-mobile-ads",
-      "state" : {
-        "revision" : "7778cc1ab037c10dbbe026959e51e616bd961be9",
-        "version" : "11.13.0"
-      }
-    },
-    {
-      "identity" : "swift-package-manager-google-user-messaging-platform",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/googleads/swift-package-manager-google-user-messaging-platform",
-      "state" : {
-        "revision" : "708a282840c2171ee63bd93b87afa49fe507d70e",
-        "version" : "2.7.0"
-      }
-    },
-    {
       "identity" : "swift-package-support-sentencepiece",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/weiyanlin117/swift-package-support-sentencepiece",
@@ -357,42 +276,6 @@
       "location" : "https://github.com/apple/swift-system.git",
       "state" : {
         "revision" : "fbd61a676d79cbde05cd4fda3cc46e94d6b8f0eb"
-      }
-    },
-    {
-      "identity" : "swift-transformers",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/huggingface/swift-transformers.git",
-      "state" : {
-        "revision" : "150169bfba0889c229a2ce7494cf8949f18e6906",
-        "version" : "1.1.9"
-      }
-    },
-    {
-      "identity" : "whisper.spm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ggerganov/whisper.spm",
-      "state" : {
-        "revision" : "a2085436c2eb796af90956b62bd64731f5e5b823",
-        "version" : "1.6.2"
-      }
-    },
-    {
-      "identity" : "whisperkit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/argmaxinc/WhisperKit.git",
-      "state" : {
-        "revision" : "e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef",
-        "version" : "0.18.0"
-      }
-    },
-    {
-      "identity" : "yyjson",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ibireme/yyjson.git",
-      "state" : {
-        "revision" : "8b4a38dc994a110abaec8a400615567bd996105f",
-        "version" : "0.12.0"
       }
     },
     {

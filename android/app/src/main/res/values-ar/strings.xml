@@ -73,12 +73,12 @@
     <string name="github_repository">مستودع GitHub</string>
     <string name="acknowledgments">شكر وتقدير</string>
     <string name="acknowledgments_text">شكر خاص إلى Google وMeta وMicrosoft وIBM ومجتمع HuggingFace لتقديم نماذج LLM المذهلة التي تدعم هذا التطبيق. يعتمد هذا المشروع أيضًا على عمل مجتمع مطوري أندرويد ونظام المصادر المفتوحة الرائع.</string>
-    <string name="sd_models_credit">تعمل نماذج إنشاء الصور بواسطة تطبيقات Stable Diffusion من xororz باستخدام واجهات Qualcomm QNN (NPU) وAlibaba MNN (CPU).</string>
+    <string name="sd_models_credit">تعمل نماذج إنشاء الصور بواسطة تطبيقات Stable Diffusion من xororz باستخدام واجهات Qualcomm QNN (NPU) وCPU.</string>
     <string name="nexa_sdk_credit">يتم تشغيل استدلال نماذج GGUF بواسطة Nexa SDK.</string>
     <string name="ai_thinking">الذكاء الاصطناعي يفكر...</string>
     <string name="thinking_label">التفكير</string>
     <string name="thinking_tokens">التفكير (%1$d رموز)</string>
-    <string name="version_number">الإصدار 3.8.3</string>
+    <string name="version_number">الإصدار 4.4.2</string>
     <string name="app_version">إصدار التطبيق</string>
 
     <!-- Terms of Service -->
@@ -409,6 +409,7 @@
     <string name="supports_vision">يدعم الرؤية</string>
     <string name="supports_audio">يدعم الصوت</string>
     <string name="supports_gpu">يدعم GPU</string>
+    <string name="supports_mtp">يدعم MTP</string>
     <string name="model_format">صيغة النموذج</string>
     <string name="context_window_size">حجم نافذة السياق</string>
     <string name="import_model">استيراد النموذج</string>
@@ -471,7 +472,8 @@
     <string name="translator_auto_detect">اكتشاف تلقائي</string>
     <string name="translator_translate">ترجمة</string>
     <string name="translator_result">الترجمة</string>
-    <string name="translator_requires_gemma3n">تتطلب هذه الميزة نموذج Gemma-3n أو Gemma-4 E2B/E4B. يرجى تنزيل نموذج من شاشة النماذج.</string>
+    <string name="translator_requires_gemma3n">يمكن استخدام أي نموذج LLM للترجمة. يوصى بنماذج Gemma 4 للحصول على أفضل أداء متعدد اللغات.</string>
+    <string name="translator_load_model_desc">قم بتنزيل أي نموذج LLM لبدء الترجمة. يوصى بنماذج Gemma 4 للحصول على أفضل أداء متعدد اللغات.</string>
 
     <!-- Transcriber Screen -->
     <string name="transcriber_title">ناسخ دون اتصال</string>
@@ -562,6 +564,7 @@
     <string name="lang_bulgarian">البلغارية</string>
     <string name="lang_burmese">البورمية</string>
     <string name="lang_catalan">الكتالونية</string>
+    <string name="lang_central_kurdish">الكردية المركزية (السورانية)</string>
     <string name="lang_chinese">الصينية (المبسطة)</string>
     <string name="lang_chinese_traditional">الصينية (التقليدية)</string>
     <string name="lang_croatian">الكرواتية</string>
@@ -710,7 +713,7 @@
     <string name="chat_title">عنوان الدردشة</string>
     <string name="more_options">المزيد من الخيارات</string>
     <string name="dialog_delete_creator_title">حذف الشخصية؟</string>
-    <string name="dialog_delete_creator_message">حذف الشخصية &quot;%1&quot;؟</string>
+    <string name="dialog_delete_creator_message">حذف الشخصية \"%1\"؟</string>
     <string name="action_rename">إعادة التسمية</string>
 
     <!-- Vibe Coder Feature -->
@@ -808,9 +811,10 @@
     <!-- Premium / IAP -->
     <string name="premium_title">LLM Hub Premium مدى الحياة</string>
     <string name="premium_subtitle">افتح التجربة الكاملة</string>
-    <string name="premium_feature_no_ads">لا إعلانات أبداً</string>
     <string name="premium_feature_vibe_coder">VibeCoder – مولّد كود بالذكاء الاصطناعي</string>
     <string name="premium_feature_image_gen">مولّد الصور – فن الذكاء الاصطناعي على الجهاز</string>
+    <string name="premium_feature_creaitors">creAItors – إنشاء رفقاء ذكاء اصطناعي</string>
+    <string name="premium_feature_vibevoice">VibeVoice – دردشة صوتية بالذكاء الاصطناعي دون استخدام اليدين</string>
     <string name="premium_feature_tts">القراءة التلقائية نصّ إلى كلام</string>
     <string name="premium_feature_import_models">استيراد نماذج خارجية</string>
     <string name="premium_feature_web_search">البحث على الويب – نتائج مباشرة</string>
@@ -828,10 +832,6 @@
     <string name="premium_restore_success">تمّ استعادة الشراء بنجاح!</string>
     <string name="premium_restore_nothing">لم يُعثر على مشتريات سابقة.</string>
     <string name="premium_go_premium">الانتقال إلى Premium</string>
-
-    <!-- Privacy &amp; Ads consent -->
-    <string name="privacy_ads_title">الخصوصية والإعلانات</string>
-    <string name="privacy_ads_subtitle">إدارة تخصيص الإعلانات وخيارات الموافقة</string>
     <string name="export">تصدير</string>
     <string name="home_section_tools">الأدوات</string>
     <string name="home_section_utilities">الأدوات المساعدة</string>
@@ -883,7 +883,128 @@
     <string name="gemma_voice_option">Gemma</string>
         <string name="asr_model_backend"></string>
     <string name="llm_model_backend">الواجهة الخلفية لنموذج LLM</string>
+    <!-- Agent Feature -->
+    <string name="feature_agent">وكيل</string>
+    <string name="feature_agent_desc">مساعد ذكاء اصطناعي بأدوات وإجراءات</string>
+    <string name="premium_feature_agent">الوكيل – ذكاء اصطناعي بأدوات وإجراءات</string>
+    <string name="agent_title">وكيل</string>
+    <string name="agent_subtitle">اسألني عن أي شيء — أستطيع البحث والتعيين على الخريطة وإدارة التقويم والمزيد</string>
+    <string name="agent_input_placeholder">اسأل وكيلك…</string>
+    <string name="agent_voice_mode_system">النظام</string>
+    <string name="agent_voice_mode_whisper">Whisper</string>
+    <string name="agent_voice_mode_gemma">Gemma</string>
+    <string name="agent_tool_running">جارٍ التشغيل: %1$s</string>
+    <string name="agent_tool_success">تم</string>
+    <string name="agent_tool_failed">فشل</string>
+    <string name="agent_tool_confirm_title">السماح بالإجراء؟</string>
+    <string name="agent_tool_confirm_body">يريد الوكيل: %1$s</string>
+    <string name="agent_tool_approve">سماح</string>
+    <string name="agent_tool_deny">رفض</string>
+    <string name="agent_no_model">يرجى تنزيل نموذج لاستخدام الوكيل</string>
+    <string name="agent_map_expand">عرض الخريطة الكاملة</string>
+    <string name="agent_settings_voice_mode">وضع الإدخال الصوتي</string>
+    <string name="agent_settings_tools">الأدوات المفعّلة</string>
+    <string name="agent_termux_toggle">تفعيل أوامر Termux (متقدم)</string>
+    <string name="agent_termux_confirm">تشغيل الأمر: %1$s</string>
+    <string name="agent_calendar_confirm">إنشاء حدث: %1$s</string>
+    <string name="agent_shortcut_confirm">تشغيل الاختصار: %1$s</string>
+    <string name="agent_welcome_message">مرحباً! أنا وكيل الذكاء الاصطناعي الخاص بك. يمكنني البحث في الويب وعرض الخرائط وإدارة أحداث التقويم والتحقق من الطقس وضبط المنبهات وإرسال الرسائل وحساب التجزئة. كيف يمكنني مساعدتك اليوم؟</string>
+    <string name="agent_no_model_android">يرجى تنزيل نموذج GGUF أو LiteRT-LM أولاً لاستخدام الوكيل</string>
+    <string name="agent_no_model_ios">يرجى تنزيل نموذج أولاً لاستخدام الوكيل</string>
+    <string name="open_maps">فتح الخرائط</string>
+    <string name="agent_processing_tool">الوكيل يربط الأداة...</string>
+    <string name="agent_termux_guide_title">دليل إعداد Termux</string>
+    <string name="agent_termux_guide_desc">في Termux، قم بتفعيل إذن تشغيل التطبيقات الخارجية:</string>
+    <string name="agent_termux_cmd_copied">تم نسخ الأمر إلى الحافظة</string>
+    <string name="agent_termux_pending_approval">يتطلب الموافقة</string>
+    <string name="agent_termux_run_cmd">تشغيل الأمر</string>
+    <string name="agent_termux_cancel_cmd">إلغاء</string>
+    <string name="agent_termux_cancelled">تم الإلغاء بواسطة المستخدم</string>
+
+    <!-- Text to Speech Feature -->
+    <string name="feature_text_to_speech">تحويل النص إلى كلام</string>
+    <string name="feature_text_to_speech_desc">قراءة النصوص بصوت عالٍ باستخدام محرك النظام أو أصوات Kokoro</string>
+    <string name="tts_feature_title">تحويل النص إلى كلام</string>
+    <string name="tts_feature_subtitle">انسخ والصق النص لقراءته بصوت عالٍ باستخدام محرك تحويل النص إلى كلام وإعدادات الصوت المحددة.</string>
+    <string name="tts_input_hint">أدخل أو ألصق النص هنا...</string>
+    <string name="tts_speak_button">قراءة بصوت عالٍ</string>
+    <string name="tts_stop_button">إيقاف القراءة</string>
+    <string name="tts_paste_button">لصق النص</string>
+    <string name="tts_clear_button">مسح</string>
+    <string name="tts_speaking_status">جاري القراءة بصوت عالٍ…</string>
+    <string name="tts_idle_status">جاهز للقراءة</string>
+    <string name="tts_empty_input_warning">يرجى إدخال أو لصق نص للقراءة.</string>
+    <string name="tts_engine_system">تحويل النص إلى كلام الافتراضي للنظام</string>
+    <string name="tts_engine_kokoro">Kokoro TTS</string>
+    <string name="tts_current_voice">الصوت: %1$s</string>
+    <string name="tts_word_count">%1$d كلمة</string>
+    <string name="search_huggingface">ابحث في Hugging Face</string>
+    <string name="search_huggingface_placeholder">ابحث عن نماذج GGUF أو LiteRT-LM</string>
+    <string name="huggingface_results">نتائج Hugging Face</string>
+    <string name="download_vision_projector">تنزيل مسقط الرؤية</string>
+    <string name="huggingface_search_failed">فشل البحث في Hugging Face</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="feature_music_generator">مولد الموسيقى</string>
+    <string name="feature_music_generator_desc">إنشاء الموسيقى والمؤثرات الصوتية على الجهاز</string>
+    <string name="music_generation_models">نماذج إنشاء الموسيقى</string>
+    <string name="music_generation_models_description">نماذج الذكاء الاصطناعي لإنشاء الموسيقى والمؤثرات الصوتية محلياً.</string>
+    <string name="music_prompt_label">وصف الموسيقى</string>
+    <string name="prompt_hint_music">صف الموسيقى أو المؤثرات الصوتية المراد إنشاؤها...</string>
+    <string name="music_style_presets">أنماط جاهزة</string>
+    <string name="music_tier_select">مستوى المولد</string>
+    <string name="music_duration_label">المدة</string>
+    <string name="generate_music">إنشاء الموسيقى</string>
+    <string name="generating_music">جاري إنشاء الموسيقى...</string>
+    <string name="music_prompt_empty_warning">يرجى إدخال وصف للموسيقى المراد إنشاؤها.</string>
+    <string name="music_generated_success">تم إنشاء الموسيقى بنجاح!</string>
+    <string name="music_saved_toast">تم حفظ المقطع الصوتي في المكتبة!</string>
+    <string name="music_generator_download_model">قم بتنزيل النموذج أولاً</string>
+    <string name="music_generator_download_model_desc">قم بتنزيل نموذج إنشاء الموسيقى من شاشة النماذج لبدء إنشاء الموسيقى.</string>
+
+    <!-- MCP Agent -->
+    <string name="agent_mcp_settings">إعدادات MCP</string>
+    <string name="agent_mcp_title">أدوات MCP</string>
+    <string name="agent_mcp_description">اتصل بخوادم MCP واسمح للوكيل باستخدام أدواتها.</string>
+    <string name="agent_mcp_transport">النقل</string>
+    <string name="agent_mcp_termux_stdio">stdio عبر Termux</string>
+    <string name="agent_mcp_remote_http">HTTP بعيد</string>
+    <string name="agent_mcp_command">أمر خادم MCP</string>
+    <string name="agent_mcp_termux_help">يشغّل خادم MCP عبر stdio في Termux. ثبّت الحزم المطلوبة أولاً.</string>
+    <string name="agent_mcp_server_url">عنوان URL للخادم</string>
+    <string name="agent_mcp_bearer_token">رمز Bearer (اختياري)</string>
+    <string name="agent_mcp_approval_notice">تتطلب كل عملية استدعاء لأداة MCP موافقتك قبل تشغيلها.</string>
+    <string name="agent_mcp_connecting">جارٍ الاتصال…</string>
+    <string name="agent_mcp_connected_tools">تم توصيل %1$d من الأدوات</string>
+    <string name="agent_mcp_error">خطأ MCP: %1$s</string>
+    <string name="agent_mcp_connect">اتصال</string>
+    <string name="agent_mcp_disconnect">قطع الاتصال</string>
+    <string name="agent_mcp_tool_request">أداة MCP: %1$s</string>
+    <string name="agent_mcp_allow">سماح</string>
+    <string name="agent_mcp_deny">رفض</string>
+    <string name="agent_mcp_approval_required">الموافقة مطلوبة</string>
+    <string name="agent_mcp_denied">رفضه المستخدم</string>
+    <string name="agent_mcp_status">الحالة</string>
+    <string name="agent_termux_tool_title">أمر صدفة Termux</string>
+    <string name="agent_mcp_termux_permission_required">اسمح لـ LLM Hub بخيار «تشغيل الأوامر في بيئة Termux» من إعدادات Android > التطبيقات > LLM Hub > الأذونات > أذونات إضافية.</string>
+    <string name="agent_mcp_termux_not_installed">يلزم Termux 0.109 أو إصدار أحدث.</string>
+    <string name="agent_mcp_termux_timed_out">لم يُرجع Termux نتيجة قبل انتهاء المهلة.</string>
+    <string name="agent_mcp_termux_run_command_unavailable">لا يدعم إصدار Termux من Google Play الأوامر الخارجية. استخدم إصدار Termux من F-Droid/GitHub لاتصال stdio أو اختر HTTP البعيد.</string>
+    <string name="gguf_engine">محرك GGUF</string>
+    <string name="gguf_engine_geniex_default">GenieX (افتراضي)</string>
+    <string name="gguf_engine_llama_cpp">llama.cpp</string>
+    <string name="gguf_engine_crash_title">توقف محرك GGUF</string>
+    <string name="gguf_engine_crash_message">توقف GenieX أثناء تحميل نموذج GGUF. جرّب تغيير محرك GGUF في الإعدادات.</string>
+    <string name="gguf_engine_open_settings">فتح الإعدادات</string>
+    <!-- Hugging Face Token -->
+    <string name="hf_token_title">رمز Hugging Face</string>
+    <string name="hf_token_subtitle">رمز وصول شخصي لتنزيل النماذج</string>
+    <string name="hf_token_dialog_title">رمز وصول Hugging Face</string>
+    <string name="hf_token_explanation">إذا تعذر استخدام الرمز الافتراضي أو تجاوز حد الاستخدام، أو لتنزيل النماذج التي تتطلب موافقة على الترخيص، أدخل رمز القراءة الشخصي الخاص بك من huggingface.co/settings/tokens.</string>
+    <string name="hf_token_placeholder">أدخل الرمز الشخصي (hf_...)</string>
+    <string name="hf_token_using_default">استخدام الرمز الافتراضي</string>
+    <string name="hf_token_custom_active">الرمز المخصص مفعّل</string>
+    <string name="hf_token_clear">إعادة الضبط للافتراضي</string>
+    <string name="gguf_vulkan_setting">واجهة GPU لنماذج GGUF</string>
+    <string name="crash_recovery_title">أُغلق التطبيق بشكل غير متوقع</string>
+    <string name="crash_recovery_message">جرّب تحميل نموذج أصغر أو استخدام المعالج المركزي.</string>
 </resources>
-
-
-

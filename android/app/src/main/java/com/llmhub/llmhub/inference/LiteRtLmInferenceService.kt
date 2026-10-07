@@ -8,6 +8,7 @@ import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -24,9 +25,14 @@ import com.llmhub.llmhub.utils.KidModeManager
 import com.llmhub.llmhub.utils.LocaleHelper
 import com.llmhub.llmhub.websearch.DuckDuckGoSearchService
 import com.llmhub.llmhub.websearch.SearchIntentDetector
+import com.llmhub.llmhub.websearch.WebSearchCitationStore
 import com.llmhub.llmhub.websearch.WebSearchService
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.MessageCallback
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
@@ -202,7 +208,7 @@ class LiteRtLmInferenceService(private val applicationContext: Context) : Infere
             currentBackendIsGpu = backend is Backend.GPU
 
             // Enable Multi-Token Prediction (MTP) via speculative decoding when running on GPU, except for Gemma-4 12B
-            ExperimentalFlags.enableSpeculativeDecoding = currentBackendIsGpu && !isGemma4_12B
+            ExperimentalFlags.enableSpeculativeDecoding = model.supportsMtp && currentBackendIsGpu && !isGemma4_12B
 
             val engineConfig = EngineConfig(
                 modelPath = modelFile.absolutePath,
@@ -334,7 +340,7 @@ class LiteRtLmInferenceService(private val applicationContext: Context) : Infere
         return withContext(Dispatchers.IO) {
             val sb = StringBuilder()
             eng.createConversation(buildConversationConfig()).use { conv ->
-                conv.sendMessageAsync(prompt).collect { msg ->
+                conv.sendMessageAsyncWithCallback(prompt).collect { msg ->
                     sb.append(msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text })
                 }
             }
@@ -347,7 +353,7 @@ class LiteRtLmInferenceService(private val applicationContext: Context) : Infere
         val eng = engine ?: throw IllegalStateException("No engine loaded")
         return flow {
             eng.createConversation(buildConversationConfig()).use { conv ->
-                conv.sendMessageAsync(prompt).collect { msg ->
+                conv.sendMessageAsyncWithCallback(prompt).collect { msg ->
                     val chunk = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
                     if (chunk.isNotEmpty()) emit(chunk)
                 }
@@ -384,14 +390,15 @@ class LiteRtLmInferenceService(private val applicationContext: Context) : Infere
                 try {
                     val query = SearchIntentDetector.extractSearchQuery(currentUserMessage)
                     val results = webSearchService.search(query, maxResults = 5)
+                    WebSearchCitationStore.put(chatId, results)
                     if (results.isNotEmpty()) {
                         emit(localCtx.getString(R.string.web_search_found_results, results.size))
                         val resultsText = results.joinToString("\n\n") {
-                            "SOURCE: ${it.source}\nTITLE: ${it.title}\nCONTENT: ${it.snippet}\n---"
+                            "SOURCE: ${it.source}\nTITLE: ${it.title}\nURL: ${it.url}\nCONTENT: ${it.snippet}\n---"
                         }
                         enhancedPrompt = "CURRENT WEB SEARCH RESULTS:\n$resultsText\n\n" +
                             "Based on the above, answer: \"$currentUserMessage\"\n\n" +
-                            "Answer directly and clearly:"
+                            "Answer directly and clearly. Cite factual claims with the provided source URLs when possible:"
                     } else {
                         emit(localCtx.getString(R.string.web_search_no_results) + "\n\n")
                     }
@@ -462,7 +469,7 @@ class LiteRtLmInferenceService(private val applicationContext: Context) : Infere
                 var sentThinkOpen = false
                 var sentThinkClose = false
                 eng.createConversation(agentConfig).use { conv ->
-                    conv.sendMessageAsync(contents).collect { msg ->
+                    conv.sendMessageAsyncWithCallback(contents).collect { msg ->
                         val chunk = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
                         val thinkingChunk = if (useThinking) {
                             try { msg.channels?.get("thought") } catch (_: Exception) { null }
@@ -484,7 +491,7 @@ class LiteRtLmInferenceService(private val applicationContext: Context) : Infere
                 var sentThinkOpen = false
                 var sentThinkClose = false
                 eng.createConversation(buildConversationConfig()).use { conv ->
-                    conv.sendMessageAsync(contents).collect { msg ->
+                    conv.sendMessageAsyncWithCallback(contents).collect { msg ->
                         val chunk = msg.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
                         val thinkingChunk = if (useThinking) {
                             try { msg.channels?.get("thought") } catch (_: Exception) { null }
@@ -536,6 +543,44 @@ class LiteRtLmInferenceService(private val applicationContext: Context) : Infere
             .replace("<|start_header_id|>", "")
             .replace("<|end_header_id|>", "")
         return Pair(cleaned, shouldStop)
+    }
+
+    private fun Conversation.sendMessageAsyncWithCallback(prompt: String): Flow<Message> = callbackFlow {
+        try {
+            sendMessageAsync(prompt, object : MessageCallback {
+                override fun onMessage(message: Message) {
+                    trySend(message)
+                }
+                override fun onDone() {
+                    close()
+                }
+                override fun onError(throwable: Throwable) {
+                    close(throwable)
+                }
+            })
+        } catch (e: Exception) {
+            close(e)
+        }
+        awaitClose {}
+    }
+
+    private fun Conversation.sendMessageAsyncWithCallback(contents: Contents): Flow<Message> = callbackFlow {
+        try {
+            sendMessageAsync(contents, object : MessageCallback {
+                override fun onMessage(message: Message) {
+                    trySend(message)
+                }
+                override fun onDone() {
+                    close()
+                }
+                override fun onError(throwable: Throwable) {
+                    close(throwable)
+                }
+            })
+        } catch (e: Exception) {
+            close(e)
+        }
+        awaitClose {}
     }
 
 }

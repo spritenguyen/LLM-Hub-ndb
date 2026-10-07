@@ -3,9 +3,6 @@ package com.llmhub.llmhub
 import android.app.Application
 import android.content.Context
 import android.content.res.Configuration
-import com.llmhub.llmhub.ads.AdManager
-import com.llmhub.llmhub.ads.InterstitialAdManager
-import com.llmhub.llmhub.ads.RewardedAdManager
 import com.llmhub.llmhub.billing.BillingManager
 import com.llmhub.llmhub.data.LlmHubDatabase
 import com.llmhub.llmhub.data.ThemePreferences
@@ -13,6 +10,7 @@ import com.llmhub.llmhub.inference.InferenceService
 import com.llmhub.llmhub.inference.UnifiedInferenceService
 import com.llmhub.llmhub.repository.ChatRepository
 import com.llmhub.llmhub.utils.LocaleHelper
+import com.llmhub.llmhub.utils.CrashNotice
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
@@ -33,22 +31,13 @@ class LlmHubApplication : Application() {
     /** Billing manager — lazily constructed, persists for App lifetime. */
     val billingManager by lazy { BillingManager(this) }
 
-    /** Interstitial ad manager — lazily constructed, persists for App lifetime. */
-    val interstitialAdManager by lazy { InterstitialAdManager(this) }
-
-    /** Rewarded ad manager — lazily constructed, persists for App lifetime. */
-    val rewardedAdManager by lazy { RewardedAdManager(this) }
-
     override fun onCreate() {
         super.onCreate()
+        CrashNotice.installJavaCrashHandler(this)
         // Apply saved language preference or system locale
         applySavedLanguage()
-        // Initialise AdMob SDK
-        AdManager.initialize(this)
-        // Eagerly construct billing & ads managers so they start connecting immediately
+        // Eagerly construct billing manager so it starts connecting immediately
         billingManager
-        interstitialAdManager
-        rewardedAdManager
     }
     
     override fun attachBaseContext(base: Context) {

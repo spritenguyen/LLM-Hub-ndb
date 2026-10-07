@@ -43,34 +43,34 @@
 "about_llm_hub" = "درباره LLM Hub";
 "about_description" = "LLM Hub یک اپلیکیشن متن‌باز است که قدرت مدل‌های زبانی بزرگ را مستقیماً به دستگاه همراه شما می‌آورد. گفتگوهای هوش مصنوعی با مدل‌های به‌روز مانند Gemma، Llama و Phi را تجربه کنید — همه به صورت محلی روی گوشی شما برای حداکثر حریم خصوصی و دسترسی آفلاین اجرا می‌شوند.";
 "key_features" = "ویژگی‌های کلیدی";
-"feature_multiple_models" = "🤖 چندین مدل LLM: Gemma-3، Llama-3.2، Phi-4 و Translate Gemma";
-"feature_on_device" = "📱 پردازش روی دستگاه: حریم خصوصی کامل، بدون نیاز به اینترنت";
-"feature_vision_support" = "🖼️ پشتیبانی بینایی: مدل‌های چندوجهی که تصاویر را می‌فهمند";
-"feature_gpu_acceleration" = "⚡ شتاب GPU: عملکرد بهینه روی دستگاه‌های پشتیبانی‌شده";
-"feature_offline_usage" = "💾 استفاده آفلاین: گفتگو بدون اتصال اینترنت";
-"feature_privacy_first" = "🔒 حریم خصوصی در اولویت: گفتگوهای شما هرگز دستگاه را ترک نمی‌کنند";
-"feature_modern_ui" = "🎨 رابط کاربری مدرن: طراحی تمیز و شهودی متریال دیزاین";
+"feature_multiple_models" = "چندین مدل LLM: Gemma-3، Llama-3.2، Phi-4 و Translate Gemma";
+"feature_on_device" = "پردازش روی دستگاه: حریم خصوصی کامل، بدون نیاز به اینترنت";
+"feature_vision_support" = "پشتیبانی بینایی: مدل‌های چندوجهی که تصاویر را می‌فهمند";
+"feature_gpu_acceleration" = "شتاب GPU: عملکرد بهینه روی دستگاه‌های پشتیبانی‌شده";
+"feature_offline_usage" = "استفاده آفلاین: گفتگو بدون اتصال اینترنت";
+"feature_privacy_first" = "حریم خصوصی در اولویت: گفتگوهای شما هرگز دستگاه را ترک نمی‌کنند";
+"feature_modern_ui" = "رابط کاربری مدرن: طراحی تمیز و شهودی متریال دیزاین";
 "developer_info" = "اطلاعات توسعه‌دهنده";
 "about_developer_info" = "این پروژه توسط یک علاقه‌مند که مشتاق دسترس‌پذیرتر کردن فناوری هوش مصنوعی برای همه است توسعه داده می‌شود. بازخورد و مشارکت‌های شما همیشه پذیرفته است!";
 "tech_stack" = "پشته فناوری";
 "about_tech_stack" = "LLM Hub با استفاده از Swift، SwiftUI و کتابخانه llama.cpp برای استنتاج کارآمد روی دستگاه ساخته شده است.";
-"tech_kotlin_compose" = "🏗️ ساخته‌شده با Kotlin و Jetpack Compose";
-"tech_mediapipe_litert" = "🧠 قدرت‌گرفته از MediaPipe و LiteRT";
-"tech_quantization" = "🚀 بهینه‌شده با کمّی‌سازی INT4/INT8";
-"tech_gpu_acceleration" = "⚡ شتاب GPU از طریق LiteRT XNNPACK";
-"tech_models_source" = "🔗 مدل‌ها از HuggingFace و Google";
+"tech_kotlin_compose" = "ساخته‌شده با Kotlin و Jetpack Compose";
+"tech_mediapipe_litert" = "قدرت‌گرفته از MediaPipe و LiteRT";
+"tech_quantization" = "بهینه‌شده با کمّی‌سازی INT4/INT8";
+"tech_gpu_acceleration" = "شتاب GPU از طریق LiteRT XNNPACK";
+"tech_models_source" = "مدل‌ها از HuggingFace و Google";
 "contact_support" = "تماس و پشتیبانی";
 "contact_email" = "ایمیل تماس:";
 "source_code" = "کد منبع:";
 "github_repository" = "مخزن GitHub";
 "acknowledgments" = "قدردانی";
 "acknowledgments_text" = "از Google، Meta، Microsoft، IBM و جامعه HuggingFace برای ارائه مدل‌های شگفت‌انگیز LLM که این برنامه را قدرت می‌بخشند، به‌طور ویژه قدردانی می‌شود. این پروژه همچنین بر کار فوق‌العاده جامعه توسعه‌دهندگان اندروید و اکوسیستم متن‌باز تکیه دارد.";
-"sd_models_credit" = "مدل‌های تولید تصویر توسط پیاده‌سازی‌های Stable Diffusion از xororz با استفاده از بکندهای Qualcomm QNN (NPU) و Alibaba MNN (CPU) نیرو می‌گیرند.";
+"sd_models_credit" = "مدل‌های تولید تصویر توسط پیاده‌سازی‌های Stable Diffusion از xororz با استفاده از بکندهای Qualcomm QNN (NPU) و CPU نیرو می‌گیرند.";
 "nexa_sdk_credit" = "استنتاج مدل‌های GGUF توسط Nexa SDK نیرو می‌گیرد.";
 "ai_thinking" = "هوش مصنوعی در حال فکر کردن…";
 "thinking_label" = "تفکر";
 "thinking_tokens" = "تفکر (%1$d توکن)";
-"version_number" = "نسخه 3.8.3";
+"version_number" = "نسخه 4.4.2";
 "app_version" = "نسخه برنامه";
 "terms_of_service" = "شرایط خدمات";
 "tos_last_updated" = "آخرین بروزرسانی: 16 ژوئیه 2025";
@@ -310,6 +310,9 @@
 "clear_all" = "پاک‌سازی همه";
 "auto_readout" = "خواندن خودکار";
 "auto_readout_description" = "پس از ارسال درخواست، پاسخ‌های هوش مصنوعی را خودکار بخوان";
+"text_to_speech_voices" = "صداهای تبدیل متن به گفتار";
+"text_to_speech_voices_description" = "صداهای iOS را برای محتوای گفتاری انتخاب کنید";
+"tts_voices_nav_hint" = "برو به تنظیمات ← دسترسی‌پذیری ← خواندن و صحبت کردن ← صداها.";
 "memory_cleared" = "همه حافظه‌ها پاک شدند";
 "confirm_replace_memory_title" = "حافظه موجود جایگزین شود؟";
 "confirm_replace_memory_message" = "شما یک حافظه سراسری دارید. جایگزینی آن حافظه و امبدینگ‌های موجود را حذف می‌کند. ادامه می‌دهید؟";
@@ -358,6 +361,7 @@
 "supports_vision" = "پشتیبانی از بینایی";
 "supports_audio" = "پشتیبانی از صوت";
 "supports_gpu" = "پشتیبانی از GPU";
+"supports_mtp" = "پشتیبانی از MTP";
 "model_format" = "قالب مدل";
 "context_window_size" = "اندازه پنجره زمینه";
 "import_model" = "وارد کردن مدل";
@@ -414,7 +418,8 @@
 "translator_auto_detect" = "تشخیص خودکار";
 "translator_translate" = "ترجمه";
 "translator_result" = "ترجمه";
-"translator_requires_gemma3n" = "این ویژگی به یک مدل Translate Gemma یا Gemma 4 نیاز دارد. لطفاً یکی را از صفحه مدل‌ها دانلود کنید.";
+"translator_requires_gemma3n" = "هر مدل LLM می‌تواند برای ترجمه استفاده شود. مدل‌های Gemma 4 برای بهترین عملکرد چندزبانه توصیه می‌شوند.";
+"translator_load_model_desc" = "هر مدل LLM را برای شروع ترجمه دانلود کنید. مدل‌های Gemma 4 برای بهترین عملکرد چندزبانه توصیه می‌شوند.";
 "transcriber_title" = "رونویس‌گر آفلاین";
 "transcriber_record" = "ضبط صدا";
 "transcriber_upload" = "آپلود صدا";
@@ -492,6 +497,7 @@
 "lang_bulgarian" = "بلغاری";
 "lang_burmese" = "برمه‌ای";
 "lang_catalan" = "کاتالان";
+"lang_central_kurdish" = "کردی مرکزی (سورانی)";
 "lang_chinese" = "چینی (ساده‌شده)";
 "lang_chinese_traditional" = "چینی (سنتی)";
 "lang_croatian" = "کرواتی";
@@ -703,7 +709,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub Premium مادام‌العمر";
 "premium_subtitle" = "تجربه کامل را باز کنید";
-"premium_feature_no_ads" = "بدون تبلیغات، هرگز";
 "premium_feature_vibe_coder" = "VibeCoder – مولد کد هوش مصنوعی";
 "premium_feature_image_gen" = "مولد تصویر – هنر هوش مصنوعی روی دستگاه";
 "premium_feature_tts" = "خواندن خودکار متن به گفتار";
@@ -725,8 +730,6 @@
 "premium_restore_success" = "خرید با موفقیت بازیابی شد!";
 "premium_restore_nothing" = "هیچ خرید قبلی یافت نشد.";
 "premium_go_premium" = "رفتن به Premium";
-"privacy_ads_title" = "حریم خصوصی و تبلیغات";
-"privacy_ads_subtitle" = "مدیریت شخصی‌سازی تبلیغات و انتخاب‌های رضایت";
 "export" = "صادر کردن";
 "home_section_tools" = "ابزارها";
 "home_section_utilities" = "ابزارهای کمکی";
@@ -807,5 +810,117 @@
 "whisper_live_transcription" = "رونویسی زنده با Whisper";
 "whisper_transcribing" = "در حال رونویسی با Whisper…";
 
+"prompt_template_optional" = "قالب پرامپت (اختیاری)";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "از {{SYSTEM}}، {{USER}}، {{ASSISTANT}} به عنوان جایگزین استفاده کنید";
+
 "on_device_ai_engine" = "موتور هوش مصنوعی روی دستگاه";
 "secure_private" = "امن و خصوصی";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "دستیار";
+"feature_agent_desc" = "دستیار هوش مصنوعی با ابزارها و اقدامات";
+"premium_feature_agent" = "دستیار – هوش مصنوعی با ابزارها و اقدامات";
+"agent_title" = "دستیار";
+"agent_subtitle" = "از من هر چیزی بپرس — می‌توانم جستجو، نقشه‌کشی، تقویم و بیشتر انجام دهم";
+"agent_input_placeholder" = "از دستیارت بپرس…";
+"agent_voice_mode_system" = "سیستم";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "در حال اجرا: %@";
+"agent_tool_success" = "انجام شد";
+"agent_tool_failed" = "ناموفق";
+"agent_tool_confirm_title" = "اجازه به اقدام؟";
+"agent_tool_confirm_body" = "دستیار می‌خواهد: %@";
+"agent_tool_approve" = "اجازه";
+"agent_tool_deny" = "رد";
+"agent_no_model" = "لطفاً یک مدل دانلود کنید تا از دستیار استفاده کنید";
+"agent_map_expand" = "نمایش نقشه کامل";
+"agent_settings_voice_mode" = "حالت ورودی صوتی";
+"agent_settings_tools" = "ابزارهای فعال";
+"agent_shortcut_confirm" = "اجرای میانبر: %@";
+"agent_calendar_confirm" = "ایجاد رویداد: %@";
+
+"agent_welcome_message" = "سلام! من عامل هوش مصنوعی شما هستم. می‌توانم در وب جستجو کنم، نقشه‌ها را نشان دهم، رویدادهای تقویم را مدیریت کنم، آب و هوا را بررسی کنم، هشدارها را تنظیم کنم، پیام بفرستم و هش‌ها را محاسبه کنم. امروز چگونه می‌توانم به شما کمک کنم؟";
+"agent_no_model_android" = "لطفاً ابتدا مدل Gemma 4 E2/4B را دانلود کنید تا از عامل استفاده کنید";
+"agent_no_model_ios" = "لطفاً ابتدا یک مدل دانلود کنید تا از عامل استفاده کنید";
+
+"open_maps" = "باز کردن نقشه";
+"agent_processing_tool" = "عامل در حال پردازش ابزار است...";
+
+"premium_feature_vibevoice" = "VibeVoice – هوش مصنوعی گفتار و صدا";
+"premium_feature_vibecoder" = "VibeCode – سازنده کد هوش مصنوعی";
+"premium_feature_image_generator" = "مولد تصویر – هنر هوش مصنوعی روی دستگاه";
+"premium_feature_video_generator" = "مولد ویدیو – ساخت ویدیو با هوش مصنوعی";
+"search_huggingface" = "جستجو در Hugging Face";
+"search_huggingface_placeholder" = "جستجوی مدل‌های GGUF یا LiteRT-LM";
+"huggingface_results" = "نتایج Hugging Face";
+"download_vision_projector" = "دانلود پروژکتور بینایی";
+"huggingface_search_failed" = "جستجوی Hugging Face ناموفق بود";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "سازنده موسیقی";
+"feature_music_generator_desc" = "تولید موسیقی و جلوه‌های صوتی روی دستگاه";
+"music_generation_models" = "مدل‌های تولید موسیقی";
+"music_generation_models_description" = "مدل‌های هوش مصنوعی آفلاین برای ساخت قطعات موسیقی و افکت‌های صوتی.";
+"music_prompt_label" = "توضیحات موسیقی";
+"prompt_hint_music" = "موسیقی یا افکت صوتی مورد نظر خود را توصیف کنید...";
+"music_style_presets" = "سبک‌های پیش‌فرض";
+"music_tier_select" = "سطح تولیدکننده";
+"music_duration_label" = "مدت زمان";
+"generate_music" = "تولید موسیقی";
+"generating_music" = "در حال تولید موسیقی...";
+"music_prompt_empty_warning" = "لطفاً توضیحی برای موسیقی مورد نظر وارد کنید.";
+"music_generated_success" = "موسیقی با موفقیت تولید شد!";
+"music_saved_toast" = "فایل صوتی در کتابخانه ذخیره شد!";
+
+"music_generator_download_model" = "ابتدا مدل را دانلود کنید";
+"music_generator_download_model_desc" = "یک مدل تولید موسیقی را از صفحه مدل‌ها دانلود کنید تا شروع به تولید موسیقی کنید.";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "تنظیمات MCP";
+"agent_mcp_title" = "ابزارهای MCP";
+"agent_mcp_description" = "به سرورهای MCP متصل شوید و به عامل اجازه دهید از ابزارهای آن‌ها استفاده کند.";
+"agent_mcp_transport" = "انتقال";
+"agent_mcp_termux_stdio" = "stdio ترموکس";
+"agent_mcp_remote_http" = "HTTP راه‌دور";
+"agent_mcp_command" = "فرمان سرور MCP";
+"agent_mcp_termux_help" = "سرور MCP را از طریق stdio ترموکس اجرا می‌کند. ابتدا بسته‌های لازم را نصب کنید.";
+"agent_mcp_server_url" = "نشانی سرور";
+"agent_mcp_bearer_token" = "توکن Bearer (اختیاری)";
+"agent_mcp_approval_notice" = "هر فراخوانی ابزار MCP پیش از اجرا به تأیید شما نیاز دارد.";
+"agent_mcp_connecting" = "در حال اتصال…";
+"agent_mcp_connected_tools" = "%d ابزار متصل شد";
+"agent_mcp_error" = "خطای MCP: %@";
+"agent_mcp_missing_required_arguments" = "آرگومان‌های ضروری MCP وجود ندارد: %@";
+"agent_mcp_connect" = "اتصال";
+"agent_mcp_disconnect" = "قطع اتصال";
+"agent_mcp_tool_request" = "ابزار MCP: %@";
+"agent_mcp_allow" = "اجازه";
+"agent_mcp_deny" = "رد";
+"agent_mcp_approval_required" = "تأیید لازم است";
+"agent_mcp_denied" = "توسط کاربر رد شد";
+"agent_mcp_status" = "وضعیت";
+"agent_termux_tool_title" = "فرمان پوسته ترموکس";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "توکن Hugging Face";
+"hf_token_subtitle" = "توکن دسترسی شخصی برای دانلود مدل‌ها";
+"hf_token_dialog_title" = "توکن دسترسی Hugging Face";
+"hf_token_explanation" = "اگر توکن پیش‌فرض کار نکرد، به محدودیت نرخ رسید یا هنگام دانلود مدل‌های دارای مجوز تایید شده، توکن خواندن شخصی خود را از huggingface.co/settings/tokens وارد کنید.";
+"hf_token_placeholder" = "وارد کردن توکن شخصی (hf_...)";
+"hf_token_using_default" = "در حال استفاده از توکن پیش‌فرض";
+"hf_token_custom_active" = "توکن سفارشی فعال است";
+"hf_token_clear" = "بازنشانی به پیش‌فرض";
+
+/* Edit Prompt Template */
+"edit" = "ویرایش";
+"prompt_template" = "الگوی پرامپت";
+"edit_prompt_template" = "ویرایش الگوی پرامپت";
+"prompt_template_none" = "هیچ‌کدام (پیش‌فرض)";

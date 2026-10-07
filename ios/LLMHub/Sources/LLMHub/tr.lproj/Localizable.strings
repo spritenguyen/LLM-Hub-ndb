@@ -43,34 +43,34 @@
 "about_llm_hub" = "LLM Hub Hakkında";
 "about_description" = "LLM Hub, Büyük Dil Modellerinin gücünü doğrudan mobil cihazınıza getiren açık kaynaklı bir uygulamadır. Gemma, Llama ve Phi gibi son teknoloji modellerle yapay zeka konuşmaları yaşayın - hepsi maksimum gizlilik ve çevrimdışı erişilebilirlik için telefonunuzda yerel olarak çalışıyor.";
 "key_features" = "Temel Özellikler";
-"feature_multiple_models" = "🤖 Çoklu LLM Modelleri: Gemma-3, Llama-3.2, Phi-4 ve Translate Gemma";
-"feature_on_device" = "📱 Cihaz Üzerinde İşleme: Tam gizlilik, internet gerekmiyor";
-"feature_vision_support" = "🖼️ Görsel Desteği: Görselleri anlayan çoklu ortam modelleri";
-"feature_gpu_acceleration" = "⚡ GPU Hızlandırma: Desteklenen cihazlarda optimize edilmiş performans";
-"feature_offline_usage" = "💾 Çevrimdışı Kullanım: İnternet bağlantısı olmadan sohbet edin";
-"feature_privacy_first" = "🔒 Önce Gizlilik: Konuşmalarınız asla cihazınızdan ayrılmaz";
-"feature_modern_ui" = "🎨 Modern Arayüz: Temiz, sezgisel Material Design arayüzü";
+"feature_multiple_models" = "Çoklu LLM Modelleri: Gemma-3, Llama-3.2, Phi-4 ve Translate Gemma";
+"feature_on_device" = "Cihaz Üzerinde İşleme: Tam gizlilik, internet gerekmiyor";
+"feature_vision_support" = "Görsel Desteği: Görselleri anlayan çoklu ortam modelleri";
+"feature_gpu_acceleration" = "GPU Hızlandırma: Desteklenen cihazlarda optimize edilmiş performans";
+"feature_offline_usage" = "Çevrimdışı Kullanım: İnternet bağlantısı olmadan sohbet edin";
+"feature_privacy_first" = "Önce Gizlilik: Konuşmalarınız asla cihazınızdan ayrılmaz";
+"feature_modern_ui" = "Modern Arayüz: Temiz, sezgisel Material Design arayüzü";
 "developer_info" = "Geliştirici Bilgisi";
 "about_developer_info" = "Bu proje, yapay zeka teknolojisini herkes için daha erişilebilir hale getirmeye tutkulu bir meraklı tarafından geliştirilmiştir. Geri bildiriminiz ve katkılarınız her zaman beklenir!";
 "tech_stack" = "Teknoloji Yığını";
 "about_tech_stack" = "LLM Hub, Swift, SwiftUI ve cihaz üzerinde verimli çıkarım için llama.cpp kütüphanesi kullanılarak oluşturulmuştur.";
-"tech_kotlin_compose" = "🏗️ Kotlin ve Jetpack Compose ile geliştirildi";
-"tech_mediapipe_litert" = "🧠 MediaPipe ve LiteRT tarafından destekleniyor";
-"tech_quantization" = "🚀 INT4/INT8 kuantalama ile optimize edildi";
-"tech_gpu_acceleration" = "⚡ LiteRT XNNPACK ile GPU hızlandırma";
-"tech_models_source" = "🔗 HuggingFace ve Google\'dan modeller";
+"tech_kotlin_compose" = "Kotlin ve Jetpack Compose ile geliştirildi";
+"tech_mediapipe_litert" = "MediaPipe ve LiteRT tarafından destekleniyor";
+"tech_quantization" = "INT4/INT8 kuantalama ile optimize edildi";
+"tech_gpu_acceleration" = "LiteRT XNNPACK ile GPU hızlandırma";
+"tech_models_source" = "HuggingFace ve Google\'dan modeller";
 "contact_support" = "İletişim ve Destek";
 "contact_email" = "İletişim E-postası:";
 "source_code" = "Kaynak Kodu";
 "github_repository" = "GitHub Deposu";
 "acknowledgments" = "Teşekkürler";
 "acknowledgments_text" = "Bu uygulamayı destekleyen inanılmaz LLM modellerini sağladıkları için Google, Meta, Microsoft, IBM ve HuggingFace topluluğuna özel teşekkürler. Bu proje ayrıca Android geliştirme topluluğunun ve açık kaynak ekosisteminin harika çalışmalarına dayanmaktadır.";
-"sd_models_credit" = "Görüntü oluşturma modelleri, Qualcomm QNN (NPU) ve Alibaba MNN (CPU) arka uçlarını kullanan xororz\'un Stable Diffusion uygulamaları tarafından desteklenmektedir.";
+"sd_models_credit" = "Görüntü oluşturma modelleri, Qualcomm QNN (NPU) ve CPU arka uçlarını kullanan xororz\'un Stable Diffusion uygulamaları tarafından desteklenmektedir.";
 "nexa_sdk_credit" = "GGUF model çıkarımı Nexa SDK tarafından desteklenmektedir.";
 "ai_thinking" = "Yapay zeka düşünüyor...";
 "thinking_label" = "Düşünme";
 "thinking_tokens" = "Düşünme (%1$d token)";
-"version_number" = "Sürüm 3.8.3";
+"version_number" = "Sürüm 4.4.2";
 "app_version" = "Uygulama Sürümü";
 "terms_of_service" = "Hizmet Şartları";
 "tos_last_updated" = "Son güncelleme: 16 Temmuz 2025";
@@ -267,6 +267,9 @@
 "remaining" = "kalan";
 "auto_readout" = "Otomatik Okuma";
 "auto_readout_description" = "Mesaj gönderdikten sonra AI yanıtlarını otomatik olarak sesli oku";
+"text_to_speech_voices" = "Metinden konuşmaya sesleri";
+"text_to_speech_voices_description" = "Sesli içerik için iOS seslerini seç";
+"tts_voices_nav_hint" = "Ayarlar → Erişilebilirlik → Oku ve Konuş → Sesler bölümüne gidin.";
 "image_copied_clipboard" = "Görsel sohbetten kopyalandı";
 "image_copied_to_clipboard" = "Görsel panoya kopyalandı";
 "failed_to_copy_image" = "Görsel kopyalanamadı";
@@ -355,6 +358,7 @@
 "supports_vision" = "Görseli Destekler";
 "supports_audio" = "Sesi Destekler";
 "supports_gpu" = "GPU\'yu Destekler";
+"supports_mtp" = "MTP'yi Destekler";
 "model_format" = "Model Formatı";
 "context_window_size" = "Bağlam Penceresi Boyutu";
 "import_model" = "Modeli İçe Aktar";
@@ -411,7 +415,8 @@
 "translator_auto_detect" = "Otomatik Algıla";
 "translator_translate" = "Çevir";
 "translator_result" = "Çeviri";
-"translator_requires_gemma3n" = "Bu özellik bir Translate Gemma veya Gemma 4 modeli gerektirir. Lütfen Modeller ekranından bir tane indirin.";
+"translator_requires_gemma3n" = "Çeviri için herhangi bir LLM modeli kullanılabilir. En iyi çok dilli performans için Gemma 4 modelleri önerilir.";
+"translator_load_model_desc" = "Çeviriye başlamak için herhangi bir LLM modeli indirin. En iyi çok dilli performans için Gemma 4 modelleri önerilir.";
 "transcriber_title" = "Çevrimdışı Transkripsiyon";
 "transcriber_record" = "Ses Kaydet";
 "transcriber_upload" = "Ses Yükle";
@@ -489,6 +494,7 @@
 "lang_bulgarian" = "Bulgarca";
 "lang_burmese" = "Birmanca";
 "lang_catalan" = "Katalanca";
+"lang_central_kurdish" = "Merkezi Kürtçe (Sorani)";
 "lang_chinese" = "Çince (Basitleştirilmiş)";
 "lang_chinese_traditional" = "Çince (Geleneksel)";
 "lang_croatian" = "Hırvatça";
@@ -703,7 +709,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub Ömür Boyu Premium";
 "premium_subtitle" = "Tam deneyimin kilidini aç";
-"premium_feature_no_ads" = "Hiç reklam yok";
 "premium_feature_vibe_coder" = "VibeCoder – Yapay Zeka Kod Üreteci";
 "premium_feature_image_gen" = "Görsel Üreteci – Cihazda Yapay Zeka Sanatı";
 "premium_feature_tts" = "Otomatik Metinden Sese Okuma";
@@ -725,8 +730,6 @@
 "premium_restore_success" = "Satın alma başarıyla geri yüklendi!";
 "premium_restore_nothing" = "Önceki satın alma bulunamadı.";
 "premium_go_premium" = "Premium’a Geç";
-"privacy_ads_title" = "Gizlilik ve Reklamlar";
-"privacy_ads_subtitle" = "Reklam kişiselleştirme ve onay tercihlerini yönetin";
 "export" = "Dışa aktar";
 "home_section_tools" = "Araçlar";
 "home_section_utilities" = "Yardımcılar";
@@ -807,5 +810,117 @@
 "whisper_live_transcription" = "Whisper ile Canlı Transkripsiyon";
 "whisper_transcribing" = "Whisper ile transkribe ediliyor…";
 
+"prompt_template_optional" = "Prompt Şablonu (İsteğe Bağlı)";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "{{SYSTEM}}, {{USER}}, {{ASSISTANT}} yer tutucularını kullanın";
+
 "on_device_ai_engine" = "CİHAZ ÜZERİ YAPAY ZEKA MOTORU";
 "secure_private" = "GÜVENLİ VE ÖZEL";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "Ajan";
+"feature_agent_desc" = "Araçlı ve etkili AI asistanı";
+"premium_feature_agent" = "Ajan – Cihaz araçları ve eylemleri olan AI";
+"agent_title" = "Ajan";
+"agent_subtitle" = "Bana her şeyi sorabilirsiniz — arama, harita, takvim ve daha fazlasını yapabilirim";
+"agent_input_placeholder" = "Ajanınıza sorun…";
+"agent_voice_mode_system" = "Sistem";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "Çalışıyor: %@";
+"agent_tool_success" = "Tamamlandı";
+"agent_tool_failed" = "Başarısız";
+"agent_tool_confirm_title" = "Eyleme izin verilsin mi?";
+"agent_tool_confirm_body" = "Ajan yapmak istiyor: %@";
+"agent_tool_approve" = "İzin ver";
+"agent_tool_deny" = "Reddet";
+"agent_no_model" = "Ajanı kullanmak için bir model indirin";
+"agent_map_expand" = "Tam haritayı görüntüle";
+"agent_settings_voice_mode" = "Ses giriş modu";
+"agent_settings_tools" = "Etkin araçlar";
+"agent_shortcut_confirm" = "Kısayolu çalıştır: %@";
+"agent_calendar_confirm" = "Etkinlik oluştur: %@";
+
+"agent_welcome_message" = "Merhaba! Ben sizin Yapay Zeka Ajanınızım. Web'de arama yapabilir, haritaları gösterebilir, takvim etkinliklerini yönetebilir, hava durumunu kontrol edebilir, alarmlar kurabilir, mesaj gönderebilir ve hash hesaplayabilirim. Bugün size nasıl yardımcı olabilirim?";
+"agent_no_model_android" = "Ajanı kullanmak için lütfen önce Gemma 4 E2/4B modelini indirin";
+"agent_no_model_ios" = "Ajanı kullanmak için lütfen önce bir model indirin";
+
+"open_maps" = "Haritaları Aç";
+"agent_processing_tool" = "Temsilci aracı işliyor...";
+
+"premium_feature_vibevoice" = "VibeVoice – Ses ve Konuşma AI";
+"premium_feature_vibecoder" = "VibeCode – AI Kod Oluşturucu";
+"premium_feature_image_generator" = "Görsel Oluşturucu – Cihaz İçi AI Sanatı";
+"premium_feature_video_generator" = "Video Oluşturucu – AI Video Oluşturma";
+"search_huggingface" = "Hugging Face'te ara";
+"search_huggingface_placeholder" = "GGUF veya LiteRT-LM modellerini ara";
+"huggingface_results" = "Hugging Face sonuçları";
+"download_vision_projector" = "Görüntü projektörünü indir";
+"huggingface_search_failed" = "Hugging Face araması başarısız";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "Müzik Oluşturucu";
+"feature_music_generator_desc" = "Cihaz üzerinde müzik ve ses efektleri oluşturun";
+"music_generation_models" = "Müzik Oluşturma Modelleri";
+"music_generation_models_description" = "Müzik parçaları ve ses efektleri oluşturmak için cihaz içi Yapay Zeka modelleri.";
+"music_prompt_label" = "Müzik Açıklaması";
+"prompt_hint_music" = "Oluşturmak istediğiniz müziği veya ses efektini tanımlayın...";
+"music_style_presets" = "Hazır Stiller";
+"music_tier_select" = "Oluşturucu Seviyesi";
+"music_duration_label" = "Süre";
+"generate_music" = "Müzik Oluştur";
+"generating_music" = "Müzik oluşturuluyor...";
+"music_prompt_empty_warning" = "Lütfen oluşturmak istediğiniz müzik için bir açıklama girin.";
+"music_generated_success" = "Müzik başarıyla oluşturuldu!";
+"music_saved_toast" = "Ses klibi yerel kitaplığa kaydedildi!";
+
+"music_generator_download_model" = "Önce Model İndirin";
+"music_generator_download_model_desc" = "Müzik oluşturmaya başlamak için Modeller ekranından bir müzik oluşturma modeli indirin.";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "MCP ayarları";
+"agent_mcp_title" = "MCP Araçları";
+"agent_mcp_description" = "MCP sunucularına bağlanın ve Aracının araçlarını kullanmasına izin verin.";
+"agent_mcp_transport" = "Aktarım";
+"agent_mcp_termux_stdio" = "Termux stdio";
+"agent_mcp_remote_http" = "Uzak HTTP";
+"agent_mcp_command" = "MCP sunucu komutu";
+"agent_mcp_termux_help" = "MCP sunucusunu Termux stdio üzerinden çalıştırır. Önce gerekli paketleri kurun.";
+"agent_mcp_server_url" = "Sunucu URL’si";
+"agent_mcp_bearer_token" = "Bearer belirteci (isteğe bağlı)";
+"agent_mcp_approval_notice" = "Her MCP araç çağrısı çalışmadan önce onayınızı gerektirir.";
+"agent_mcp_connecting" = "Bağlanıyor…";
+"agent_mcp_connected_tools" = "%d araç bağlandı";
+"agent_mcp_error" = "MCP hatası: %@";
+"agent_mcp_missing_required_arguments" = "Gerekli MCP bağımsız değişkenleri eksik: %@";
+"agent_mcp_connect" = "Bağlan";
+"agent_mcp_disconnect" = "Bağlantıyı kes";
+"agent_mcp_tool_request" = "MCP aracı: %@";
+"agent_mcp_allow" = "İzin ver";
+"agent_mcp_deny" = "Reddet";
+"agent_mcp_approval_required" = "Onay gerekli";
+"agent_mcp_denied" = "Kullanıcı tarafından reddedildi";
+"agent_mcp_status" = "Durum";
+"agent_termux_tool_title" = "Termux kabuk komutu";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "Hugging Face Belirteci";
+"hf_token_subtitle" = "Model indirmeleri için kişisel erişim belirteci";
+"hf_token_dialog_title" = "Hugging Face Erişim Belirteci";
+"hf_token_explanation" = "Varsayılan belirteç başarısız olursa, hız sınırına ulaşırsa veya lisans onaylı korumalı modelleri indirirken huggingface.co/settings/tokens adresinden alacağınız kişisel okuma belirtecinizi girin.";
+"hf_token_placeholder" = "Kişisel belirteç girin (hf_...)";
+"hf_token_using_default" = "Varsayılan belirteç kullanılıyor";
+"hf_token_custom_active" = "Özel belirteç etkin";
+"hf_token_clear" = "Varsayılana sıfırla";
+
+/* Edit Prompt Template */
+"edit" = "Düzenle";
+"prompt_template" = "Prompt Şablonu";
+"edit_prompt_template" = "Prompt Şablonunu Düzenle";
+"prompt_template_none" = "Yok (Varsayılan)";

@@ -154,12 +154,22 @@ struct PremiumScreen: View {
 
             Spacer().frame(height: 28)
 
-            // Feature list card — iOS: only remove ads + import external models
+            // Feature list card
             VStack(spacing: 0) {
-                PremiumFeatureRow(icon: "nosign",                   tint: Color(hex: "FF7043"), textKey: "premium_feature_no_ads")
-                PremiumFeatureRow(icon: "square.and.arrow.up.fill", tint: Color(hex: "FFC107"), textKey: "premium_feature_import_models")
-                PremiumFeatureRow(icon: "sparkles",                 tint: Color(hex: "00BCD4"), textKey: "premium_feature_future", isLast: true)
+                PremiumFeatureRow(icon: "square.and.arrow.up.fill",        tint: Color(hex: "FFC107"), textKey: "premium_feature_import_models")
+                PremiumFeatureRow(icon: "cpu.fill",                        tint: Color(hex: "A78BFA"), textKey: "premium_feature_agent")
+                PremiumFeatureRow(icon: "waveform.circle.fill",           tint: Color(hex: "89D3F7"), textKey: "premium_feature_vibevoice")
+                PremiumFeatureRow(icon: "chevron.left.slash.chevron.right",tint: Color(hex: "A8BCFF"), textKey: "premium_feature_vibecoder")
+                PremiumFeatureRow(icon: "paintpalette.fill",              tint: Color(hex: "9CC3FF"), textKey: "premium_feature_image_generator")
+                PremiumFeatureRow(icon: "video.fill",                     tint: Color(hex: "FF99C8"), textKey: "premium_feature_video_generator")
+                PremiumFeatureRow(
+                    icon: "music.note",
+                    tint: Color(hex: "FF9A9E"),
+                    text: "\(settings.localized("feature_music_generator")) – \(settings.localized("feature_music_generator_desc"))"
+                )
+                PremiumFeatureRow(icon: "sparkles",                        tint: Color(hex: "00BCD4"), textKey: "premium_feature_future", isLast: true)
             }
+
             .padding(20)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -281,8 +291,25 @@ private struct PremiumFeatureRow: View {
 
     let icon: String
     let tint: Color
-    let textKey: String
+    let textKey: String?
+    let text: String?
     var isLast: Bool = false
+
+    init(icon: String, tint: Color, textKey: String, isLast: Bool = false) {
+        self.icon = icon
+        self.tint = tint
+        self.textKey = textKey
+        self.text = nil
+        self.isLast = isLast
+    }
+
+    init(icon: String, tint: Color, text: String, isLast: Bool = false) {
+        self.icon = icon
+        self.tint = tint
+        self.textKey = nil
+        self.text = text
+        self.isLast = isLast
+    }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -291,7 +318,7 @@ private struct PremiumFeatureRow: View {
                 .foregroundStyle(tint)
                 .frame(width: 24)
 
-            Text(settings.localized(textKey))
+            Text(text ?? settings.localized(textKey ?? ""))
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white.opacity(0.90))
 

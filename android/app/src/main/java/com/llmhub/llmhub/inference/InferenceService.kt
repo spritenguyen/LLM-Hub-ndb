@@ -8,6 +8,7 @@ import com.llmhub.llmhub.data.LLMModel
 import com.llmhub.llmhub.websearch.WebSearchService
 import com.llmhub.llmhub.websearch.DuckDuckGoSearchService
 import com.llmhub.llmhub.websearch.SearchIntentDetector
+import com.llmhub.llmhub.websearch.WebSearchCitationStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
@@ -753,6 +754,7 @@ class MediaPipeInferenceService(private val applicationContext: Context) : Infer
                     Log.d(TAG, "Extracted search query: '$searchQuery'")
                     
                     val searchResults = webSearchService.search(searchQuery, maxResults = 5)
+                    WebSearchCitationStore.put(chatId, searchResults)
                     
                     if (searchResults.isNotEmpty()) {
                         Log.d(TAG, "Found ${searchResults.size} search results")
@@ -760,7 +762,7 @@ class MediaPipeInferenceService(private val applicationContext: Context) : Infer
                         
                         // Create enhanced prompt with search results
                         val resultsText = searchResults.joinToString("\n\n") { result ->
-                            "SOURCE: ${result.source}\nTITLE: ${result.title}\nCONTENT: ${result.snippet}\n---"
+                            "SOURCE: ${result.source}\nTITLE: ${result.title}\nURL: ${result.url}\nCONTENT: ${result.snippet}\n---"
                         }
                         
                         // Extract just the current user question for better clarity
@@ -776,6 +778,7 @@ class MediaPipeInferenceService(private val applicationContext: Context) : Infer
                             - If the search results don't contain enough information, say so clearly
                             - For dates and events, be specific based on what you find in the results
                             - Do not make up information not found in the search results
+                            - Cite factual claims with the provided source URLs when possible
                             
                             Answer the question directly and clearly:
                         """.trimIndent()

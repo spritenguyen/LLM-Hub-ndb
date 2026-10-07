@@ -2,11 +2,14 @@ package com.llmhub.llmhub.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -18,6 +21,8 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -42,7 +47,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.runtime.rememberCoroutineScope
 import android.net.Uri
-import com.llmhub.llmhub.ads.ConsentManager
 import com.llmhub.llmhub.embedding.RagServiceManager
 import com.llmhub.llmhub.utils.FileUtils
 import com.llmhub.llmhub.R
@@ -51,8 +55,12 @@ import com.llmhub.llmhub.BuildConfig
 import com.llmhub.llmhub.data.ModelData
 import com.llmhub.llmhub.data.ModelDownloader
 import com.llmhub.llmhub.data.ThemeMode
+import com.llmhub.llmhub.data.ThemePreferences
 import com.llmhub.llmhub.data.localFileName
 import com.llmhub.llmhub.viewmodels.ThemeViewModel
+import com.llmhub.llmhub.viewmodels.ModelDownloadViewModel
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,7 +78,13 @@ fun SettingsScreen(
     val context = LocalContext.current
     var showThemeDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showHfTokenDialog by remember { mutableStateOf(false) }
+    var customHfToken by remember { mutableStateOf(ModelDownloadViewModel.getCustomToken(context)) }
     val currentThemeMode by themeViewModel.themeMode.collectAsState()
+    val ggufPreferences = remember(context) { ThemePreferences(context) }
+    val ggufUseVulkan by ggufPreferences.ggufUseVulkan.collectAsState(
+        initial = ggufPreferences.defaultGgufUseVulkan(),
+    )
     val embeddingEnabled by themeViewModel.embeddingEnabled.collectAsState()
     val memoryEnabled by themeViewModel.memoryEnabled.collectAsState()
     val selectedEmbeddingModel by themeViewModel.selectedEmbeddingModel.collectAsState()
@@ -113,6 +127,60 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.browse_download_models),
                         onClick = onNavigateToModels
                     )
+
+                    SettingsItem(
+                        icon = Icons.Default.VpnKey,
+                        title = stringResource(R.string.hf_token_title),
+                        subtitle = if (customHfToken.isNotBlank()) {
+                            stringResource(R.string.hf_token_custom_active)
+                        } else {
+                            stringResource(R.string.hf_token_using_default)
+                        },
+                        onClick = { showHfTokenDialog = true }
+                    )
+
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                        Text(stringResource(R.string.gguf_vulkan_setting), style = MaterialTheme.typography.bodyLarge)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().selectableGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(false to "OpenCL", true to "Vulkan").forEach { (useVulkan, label) ->
+                                val selected = ggufUseVulkan == useVulkan
+                                val buttonShape = RoundedCornerShape(12.dp)
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .clip(buttonShape)
+                                        .selectable(
+                                            selected = selected,
+                                            role = Role.RadioButton,
+                                            onClick = {
+                                                coroutineScope.launch { ggufPreferences.setGgufUseVulkan(useVulkan) }
+                                            },
+                                        ),
+                                    shape = buttonShape,
+                                    color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (selected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.outlineVariant,
+                                    ),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            label,
+                                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                                else MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Embedding Model Selection
                     EmbeddingModelSelector(themeViewModel = themeViewModel)
@@ -801,17 +869,6 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.legal_terms_conditions),
                         onClick = onNavigateToTerms
                     )
-
-                    // Privacy & Ads — shows AdMob consent form (visible to all users)
-                    val activity = context as? androidx.activity.ComponentActivity
-                    SettingsItem(
-                        icon = Icons.Default.PrivacyTip,
-                        title = stringResource(R.string.privacy_ads_title),
-                        subtitle = stringResource(R.string.privacy_ads_subtitle),
-                        onClick = {
-                            activity?.let { ConsentManager.showPrivacyOptionsForm(it) }
-                        }
-                    )
                 }
             }
 
@@ -828,6 +885,97 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // Hugging Face Token Dialog
+    if (showHfTokenDialog) {
+        var inputToken by remember { mutableStateOf(customHfToken) }
+        var passwordVisible by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showHfTokenDialog = false },
+            title = { Text(stringResource(R.string.hf_token_dialog_title)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.hf_token_explanation),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = inputToken,
+                        onValueChange = { inputToken = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.hf_token_title)) },
+                        placeholder = { Text(stringResource(R.string.hf_token_placeholder)) },
+                        singleLine = true,
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(image, contentDescription = null)
+                            }
+                        }
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val isCustom = customHfToken.isNotBlank()
+                        Icon(
+                            imageVector = if (isCustom) Icons.Default.CheckCircle else Icons.Default.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (isCustom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = if (isCustom) stringResource(R.string.hf_token_custom_active) else stringResource(R.string.hf_token_using_default),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isCustom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val clean = inputToken.trim()
+                        ModelDownloadViewModel.setCustomToken(context, clean)
+                        customHfToken = ModelDownloadViewModel.getCustomToken(context)
+                        showHfTokenDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (customHfToken.isNotBlank()) {
+                        TextButton(
+                            onClick = {
+                                ModelDownloadViewModel.setCustomToken(context, null)
+                                customHfToken = ""
+                                inputToken = ""
+                                showHfTokenDialog = false
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text(stringResource(R.string.hf_token_clear))
+                        }
+                    }
+                    TextButton(onClick = { showHfTokenDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            }
+        )
     }
 
     // Theme Selection Dialog
@@ -1771,8 +1919,7 @@ private fun TtsVoiceSelector(themeViewModel: ThemeViewModel) {
                                         if (downloadingVoiceKey != null) return@Button
                                         downloadingVoiceKey = voiceKey
                                         coroutineScope.launch {
-                                            val prefs = context.getSharedPreferences("model_prefs", android.content.Context.MODE_PRIVATE)
-                                            val hfToken = prefs.getString("hf_token", BuildConfig.HF_TOKEN)
+                                            val hfToken = ModelDownloadViewModel.getEffectiveToken(context)
                                             val client = HttpClient(Android)
                                             try {
                                                 ModelDownloader(client, context, hfToken)

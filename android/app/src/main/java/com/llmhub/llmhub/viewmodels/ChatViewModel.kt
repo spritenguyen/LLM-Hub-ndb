@@ -3,14 +3,15 @@ package com.llmhub.llmhub.viewmodels
 import android.content.Context
 import android.net.Uri
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Log
+import com.llmhub.llmhub.utils.loadInferenceBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.SavedStateHandle
 import com.llmhub.llmhub.data.*
 import com.llmhub.llmhub.inference.InferenceService
 import com.llmhub.llmhub.repository.ChatRepository
+import com.llmhub.llmhub.components.parseThinkingAndAnswer
 import com.llmhub.llmhub.utils.FileUtils
 import com.llmhub.llmhub.utils.AudioConversionUtils
 import com.llmhub.llmhub.R
@@ -35,7 +36,7 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import androidx.lifecycle.ViewModelProvider
 import androidx.activity.ComponentActivity
 import com.llmhub.llmhub.ui.components.TtsService
-import com.llmhub.llmhub.data.DeviceInfo
+import com.llmhub.llmhub.websearch.WebSearchCitationStore
 
 class ChatViewModel(
     private val inferenceService: InferenceService,
@@ -130,6 +131,7 @@ class ChatViewModel(
     // inference service, so we can skip applySavedModelConfig + loadModel when nothing changed.
     private var lastAppliedModelName: String? = null
     private var lastAppliedConfig: ModelConfig? = null
+    private var creatorHandoffModelName: String? = null
 
     // NOTE: intent heuristics removed — global memory will be queried whenever the
     // memory preference is enabled. Localization-specific intent checks were removed
@@ -360,9 +362,9 @@ class ChatViewModel(
         if (isLiteRtLmGemma4_12B) {
             _selectedBackend.value = LlmInference.Backend.GPU
             _selectedNpuDeviceId.value = null
-        } else if (model.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-            _selectedBackend.value = LlmInference.Backend.GPU
-            _selectedNpuDeviceId.value = "dev0"
+        } else if (model.modelFormat == "gguf") {
+            _selectedBackend.value = LlmInference.Backend.CPU
+            _selectedNpuDeviceId.value = null
         } else {
             if (_selectedBackend.value == null || (!model.supportsGpu && _selectedBackend.value == LlmInference.Backend.GPU)) {
                 _selectedBackend.value = if (model.supportsGpu) {
@@ -402,8 +404,8 @@ class ChatViewModel(
                 val cfg = modelPrefs.getModelConfig(model.name)
                 if (cfg != null) {
                     _selectedBackend.value = cfg.backend?.let {
-                        try { LlmInference.Backend.valueOf(it) } catch (_: Exception) { LlmInference.Backend.GPU }
-                    } ?: LlmInference.Backend.GPU
+                        try { LlmInference.Backend.valueOf(it) } catch (_: Exception) { if (model.modelFormat == "gguf") LlmInference.Backend.CPU else LlmInference.Backend.GPU }
+                    } ?: if (model.modelFormat == "gguf") LlmInference.Backend.CPU else LlmInference.Backend.GPU
                     _selectedNpuDeviceId.value = cfg.deviceId
                     isVisionDisabled = cfg.disableVision
                     isAudioDisabled = cfg.disableAudio
@@ -413,9 +415,9 @@ class ChatViewModel(
                     if (isLiteRtLmGemma4_12B) {
                         _selectedBackend.value = LlmInference.Backend.GPU
                         _selectedNpuDeviceId.value = null
-                    } else if (model.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported()) {
-                        _selectedBackend.value = LlmInference.Backend.GPU
-                        _selectedNpuDeviceId.value = "dev0"
+                    } else if (model.modelFormat == "gguf") {
+                        _selectedBackend.value = LlmInference.Backend.CPU
+                        _selectedNpuDeviceId.value = null
                     } else {
                         _selectedBackend.value = if (model.supportsGpu) LlmInference.Backend.GPU else LlmInference.Backend.CPU
                         _selectedNpuDeviceId.value = null
@@ -599,12 +601,12 @@ class ChatViewModel(
                 currentChatId = newChatId
                 _currentChat.value = repository.getChatById(newChatId)
                 
-                // Only reset session if there's an existing session that might have stale context
+                // Reset conversation context for the new chat without unloading the model.
                 try {
                     val currentModel = inferenceService.getCurrentlyLoadedModel()
                     if (currentModel != null) {
                         inferenceService.resetChatSession(newChatId)
-                        Log.d("ChatViewModel", "Proactively reset session for new chat $newChatId")
+                        Log.d("ChatViewModel", "Reset context for new chat $newChatId")
                     } else {
                         Log.d("ChatViewModel", "Skipping session reset for new chat - no model loaded yet")
                     }
@@ -774,9 +776,9 @@ class ChatViewModel(
      * Load downloaded models synchronously so callers can rely on the result immediately.
      */
     private suspend fun loadAvailableModelsSync(context: Context) {
-        val downloadedModels = ModelData.models
-            .filter { it.category != "embedding" && it.category != "asr" && it.category != "tts" && !it.name.contains("Projector", ignoreCase = true) }
-            .mapNotNull { model ->
+        val downloadedModels: List<LLMModel> = ModelData.models
+            .filter { it.category != "embedding" && it.category != "asr" && it.category != "tts" && it.category != "music_generation" && !it.name.contains("Projector", ignoreCase = true) }
+            .mapNotNull { model: LLMModel ->
             var isAvailable = false
             var actualSize = model.sizeBytes
 
@@ -842,10 +844,9 @@ class ChatViewModel(
                         } else {
                             Log.d("ChatViewModel", "Ignoring incomplete/invalid model file: ${primaryFile.absolutePath} sizeOk=$sizeOk valid=$valid size=${primaryFile.length()}/${model.sizeBytes}")
                         }
-                        }
                     }
                 }
-
+            }
 
             if (isAvailable) {
                 model.copy(isDownloaded = true, sizeBytes = actualSize)
@@ -867,7 +868,7 @@ class ChatViewModel(
             }
         } catch (e: Exception) {
             Log.w("ChatViewModel", "Could not get imported models: ${e.message}")
-            emptyList()
+            emptyList<LLMModel>()
         }
         
         // Combine downloaded and imported models
@@ -1182,7 +1183,7 @@ class ChatViewModel(
                     modelPromptContent = "" // Audio token will be added later in prompt building
                 } else {
                     finalMessageContent = "📄 ${attachmentFileInfo?.name}"
-                    modelPromptContent = context.getString(R.string.shared_file)
+                    modelPromptContent = finalMessageContent
                 }
             }
 
@@ -1748,7 +1749,8 @@ class ChatViewModel(
                                 if (finalContent.isBlank()) {
                                     // Check if this is a GGUF model - if so, auto-reset session and retry
                                     val isGgufModel = currentModel?.modelFormat?.equals("gguf", ignoreCase = true) == true
-                                    if (isGgufModel && !isRetryAfterContextReset) {
+                                    val isActiveVlm = currentModelSupportsVision()
+                                    if (isGgufModel && !isActiveVlm && !isRetryAfterContextReset) {
                                         Log.w("ChatViewModel", "No response from GGUF model - context window likely full. Auto-resetting session and retrying...")
                                         triggeredRetry = true
                                         isRetryAfterContextReset = true
@@ -1773,7 +1775,7 @@ class ChatViewModel(
                                         finalizeMessage(placeholderId, fallback, streamDurationMs)
                                     }
                                 } else {
-                                    val safeFinal = finalContent
+                                    val safeFinal = appendWebSearchSources(chatId, finalContent)
                                     repository.updateMessageContent(placeholderId, safeFinal.trimEnd())
                                     val time = System.currentTimeMillis() - generationStartTime
                                     val netTime = (time - ragSearchTimeMs).coerceAtLeast(1L)
@@ -1821,7 +1823,8 @@ class ChatViewModel(
                             if (finalContent.isBlank()) {
                                 // Check if this is a GGUF model - if so, auto-reset session and retry
                                 val isGgufModel = currentModel?.modelFormat?.equals("gguf", ignoreCase = true) == true
-                                if (isGgufModel && !isRetryAfterContextReset) {
+                                val isActiveVlm = currentModelSupportsVision()
+                                if (isGgufModel && !isActiveVlm && !isRetryAfterContextReset) {
                                     Log.w("ChatViewModel", "No response from GGUF model (error path) - context window likely full. Auto-resetting session and retrying...")
                                     triggeredRetry = true
                                     isRetryAfterContextReset = true
@@ -1890,9 +1893,12 @@ class ChatViewModel(
         // Only compute token statistics if we have any content to analyse.
         if (finalContent.isNotBlank()) {
 
-            val actualTokens = kotlin.math.ceil(finalContent.length / 4.0).toInt()
+            val (thinkingPart, answerPart) = parseThinkingAndAnswer(finalContent)
+            val answerContent = if (answerPart.isNotBlank()) answerPart else finalContent
+            val actualTokens = kotlin.math.ceil(answerContent.length / 4.0).toInt().coerceAtLeast(1)
+            val totalTokens = kotlin.math.ceil(finalContent.length / 4.0).toInt().coerceAtLeast(1)
             val tokensPerSecond = inferenceService.getLastDecodeSpeedTokPerSec()
-                ?: if (generationTimeMs > 0) (actualTokens * 1000.0) / generationTimeMs else 0.0
+                ?: if (generationTimeMs > 0) (totalTokens * 1000.0) / generationTimeMs else 0.0
 
             Log.d("ChatViewModel", "Saving stats for message $placeholderId: $actualTokens tokens, ${String.format("%.1f", tokensPerSecond)} tok/sec")
 
@@ -2039,7 +2045,8 @@ class ChatViewModel(
                     }
                 }
 
-                // Success - finalize the message
+                // Success - finalize the message with the exact fetched URLs.
+                totalContent = appendWebSearchSources(chatId, totalContent)
                 repository.updateMessageContent(placeholderId, totalContent.trimEnd())
                 val streamDurationMs = ((if (lastChunkAt > 0) lastChunkAt else System.currentTimeMillis()) - (if (firstChunkAt > 0) firstChunkAt else System.currentTimeMillis())).coerceAtLeast(1L)
                 finalizeMessage(placeholderId, totalContent, streamDurationMs)
@@ -2063,6 +2070,17 @@ class ChatViewModel(
                 _streamingContents.value = updatedStreaming
             }
         }
+    }
+
+    /** Appends links from the pages actually fetched; never lets the model invent source URLs. */
+    private fun appendWebSearchSources(chatId: String, content: String): String {
+        val results = WebSearchCitationStore.take(chatId)
+        if (results.isEmpty() || content.contains("\n### Sources\n")) return content
+        val references = results.distinctBy { it.url }.joinToString("\n") { result ->
+            val title = result.title.ifBlank { result.url }
+            "- [$title](${result.url})"
+        }
+        return "$content\n\n### Sources\n$references"
     }
 
     // Basic disallowed content filter (client-side heuristic; not exhaustive)
@@ -2446,18 +2464,16 @@ class ChatViewModel(
     }
     
     private suspend fun loadModelWithSavedConfig(model: LLMModel): Boolean {
-        val deviceId = if (!backendExplicitlySet && model.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-            _selectedNpuDeviceId.value = "dev0"
-            "dev0"
-        } else {
-            _selectedNpuDeviceId.value
-        }
+        creatorHandoffModelName = null
+        // A lazy load must use this model's saved sheet config, not the backend/device
+        // still held in the chat UI from a different model or a previous session.
+        val savedConfig = modelPrefs.getModelConfig(model.name)
         return com.llmhub.llmhub.data.loadModelWithSavedConfig(
             model = model,
             modelPrefs = modelPrefs,
             inferenceService = inferenceService,
-            backendOverride = _selectedBackend.value,
-            deviceIdOverride = deviceId,
+            backendOverride = if (backendExplicitlySet) _selectedBackend.value else null,
+            deviceIdOverride = if (backendExplicitlySet) _selectedNpuDeviceId.value else savedConfig?.deviceId,
             onConfigApplied = { cfg ->
                 isVisionDisabled = cfg.disableVision
                 isAudioDisabled = cfg.disableAudio
@@ -2470,6 +2486,7 @@ class ChatViewModel(
     private fun isModelAlreadyLoadedWithCurrentConfig(model: LLMModel): Boolean {
         val loaded = inferenceService.getCurrentlyLoadedModel() ?: return false
         if (loaded.name != model.name) return false
+        if (creatorHandoffModelName == model.name) return true
         if (lastAppliedModelName != model.name) return false
         val cfg = lastAppliedConfig ?: return false
         // Re-read the saved config synchronously is not possible here; compare against
@@ -3075,26 +3092,19 @@ class ChatViewModel(
             _isLoading.value = false
             isGenerating = false
             
-            // For any existing chat session, attempt a background cleanup
-            // This is fire-and-forget - don't let it block the UI
+            // Clear conversation state in the already-loaded model before creating the new chat.
             if (oldChatId != null) {
-                // Launch session cleanup in background with no UI dependency
                 launch(Dispatchers.IO) {
                     try {
-                        // Brief wait to let any ongoing operations wind down
                         kotlinx.coroutines.delay(500)
-                        
-                        // Attempt session reset with a reasonable timeout
-                        // If it fails, that's okay - session will be recreated as needed
-                        withTimeoutOrNull(2000) { // Shorter timeout to avoid hanging
+                        withTimeoutOrNull(2000) {
                             inferenceService.resetChatSession(oldChatId)
                             Log.d("ChatViewModel", "Successfully reset session for chat $oldChatId during clear all")
                         } ?: run {
-                            Log.d("ChatViewModel", "Session reset timed out for chat $oldChatId - will recreate as needed")
+                            Log.d("ChatViewModel", "Session reset timed out for chat $oldChatId")
                         }
                     } catch (e: Exception) {
-                        Log.d("ChatViewModel", "Session reset failed for chat $oldChatId: ${e.message} - will recreate as needed")
-                        // This is expected for some models/states - just log and continue
+                        Log.d("ChatViewModel", "Session reset failed for chat $oldChatId: ${e.message}")
                     }
                 }
             }
@@ -3169,11 +3179,11 @@ class ChatViewModel(
         
         Log.d("ChatViewModel", "Set new chat ID: $newChatId, chat exists: ${_currentChat.value != null}")
         
-        // Clear any transient streaming state and proactively reset the session so no old context leaks
+        // Clear transient UI state and reset conversation context while preserving model weights.
         _streamingContents.value = emptyMap()
         try {
             inferenceService.resetChatSession(newChatId)
-            Log.d("ChatViewModel", "Proactively reset session for lazily created new chat $newChatId")
+            Log.d("ChatViewModel", "Reset context for lazily created new chat $newChatId")
         } catch (e: Exception) {
             Log.w("ChatViewModel", "Unable to reset session for lazily created new chat: ${e.message}")
         }
@@ -3183,6 +3193,11 @@ class ChatViewModel(
             this.currentModel = modelToUse
             _selectedModel.value = modelToUse
             loadSettingsForModel(modelToUse)
+            // Creator and Chat share the app-scoped inference service. Adopt its loaded
+            // weights for this direct handoff instead of treating the first send as a lazy load.
+            if (creatorId != null && inferenceService.getCurrentlyLoadedModel()?.name == modelToUse.name) {
+                creatorHandoffModelName = modelToUse.name
+            }
             repository.updateChatModel(newChatId, modelToUse.name)
             _currentChat.value = repository.getChatById(newChatId)
             
@@ -3318,26 +3333,13 @@ class ChatViewModel(
             try {
                 Log.d("ChatViewModel", "Opening input stream for URI: $uri")
                 
-                // Get content resolver and open input stream
-                val contentResolver = context.contentResolver
-                val inputStream = contentResolver.openInputStream(uri)
-                
-                if (inputStream != null) {
-                    Log.d("ChatViewModel", "Input stream opened successfully")
-                    inputStream.use { stream ->
-                        val bitmap = BitmapFactory.decodeStream(stream)
-                        if (bitmap != null) {
-                            Log.d("ChatViewModel", "Bitmap decoded successfully: ${bitmap.width}x${bitmap.height}")
-                            bitmap
-                        } else {
-                            Log.w("ChatViewModel", "BitmapFactory.decodeStream returned null")
-                            null
-                        }
-                    }
+                val bitmap = loadInferenceBitmap(context, uri)
+                if (bitmap != null) {
+                    Log.d("ChatViewModel", "Bitmap decoded successfully: ${bitmap.width}x${bitmap.height}")
                 } else {
-                    Log.w("ChatViewModel", "Failed to open input stream for URI: $uri")
-                    null
+                    Log.w("ChatViewModel", "Failed to decode image URI: $uri")
                 }
+                bitmap
             } catch (e: SecurityException) {
                 Log.e("ChatViewModel", "Security exception accessing URI: $uri", e)
                 null
@@ -3618,7 +3620,7 @@ class ChatViewModel(
                         }
                         
                         // Success - finalize the message
-                        val finalContent = totalContent
+                        val finalContent = appendWebSearchSources(chatId, totalContent)
                         repository.updateMessageContent(placeholderId, finalContent.trimEnd())
                         val time = System.currentTimeMillis() - generationStartTime
                         val netTime = (time - ragSearchTimeMs).coerceAtLeast(1L)
@@ -3805,7 +3807,8 @@ class ChatViewModel(
                         _streamingContents.value = _streamingContents.value + (placeholderId to totalContent)
                     }
 
-                    // Finalize message
+                    // Finalize message with the exact fetched URLs.
+                    totalContent = appendWebSearchSources(chatId, totalContent)
                     repository.updateMessageContent(placeholderId, totalContent)
                     _streamingContents.value = emptyMap()
 

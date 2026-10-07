@@ -2,12 +2,13 @@ package com.llmhub.llmhub.viewmodels
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
+import com.llmhub.llmhub.utils.loadInferenceBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmhub.llmhub.data.LLMModel
 import com.llmhub.llmhub.data.ModelAvailabilityProvider
+import com.llmhub.llmhub.data.hasNativeVoiceSupport
 import com.llmhub.llmhub.data.ModelConfig
 import com.llmhub.llmhub.data.ModelPreferences
 import com.llmhub.llmhub.screens.Language
@@ -26,7 +27,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
-import com.llmhub.llmhub.data.DeviceInfo
 
 class TranslatorViewModel(application: Application) : AndroidViewModel(application) {
     private val inferenceService = (application as com.llmhub.llmhub.LlmHubApplication).inferenceService
@@ -66,7 +66,7 @@ class TranslatorViewModel(application: Application) : AndroidViewModel(applicati
     private val _loadError = MutableStateFlow<String?>(null)
     val loadError: StateFlow<String?> = _loadError.asStateFlow()
     
-    private val _enableThinking = MutableStateFlow(true)
+    private val _enableThinking = MutableStateFlow(false)
     val enableThinking: StateFlow<Boolean> = _enableThinking.asStateFlow()
     
     // Modality toggles
@@ -120,28 +120,28 @@ class TranslatorViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val context = getApplication<Application>()
             val allModels = ModelAvailabilityProvider.loadAvailableModels(context)
-             val multimodalModels = allModels.filter { it.category != "tts" && it.category != "embedding" && it.category != "asr" && (
-                 it.supportsVision || it.supportsAudio
-             ) }
-             _availableModels.value = multimodalModels
+            _availableModels.value = allModels
 
             // Restore saved model or use first as default
             val savedModelName = prefs.getString("selected_model_name", null)
             if (savedModelName != null) {
-                val savedModel = multimodalModels.find { it.name == savedModelName }
+                val savedModel = allModels.find { it.name == savedModelName }
                 if (savedModel != null) {
                     _selectedModel.value = savedModel
                 }
             }
             
-            if (multimodalModels.isNotEmpty() && _selectedModel.value == null) {
-                _selectedModel.value = multimodalModels.first()
+            if (allModels.isNotEmpty() && _selectedModel.value == null) {
+                _selectedModel.value = allModels.first()
             }
 
             val model = _selectedModel.value
-            if (model?.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-                _selectedBackend.value = LlmInference.Backend.GPU
-                _selectedNpuDeviceId.value = "dev0"
+            if (model?.hasNativeVoiceSupport() != true) {
+                _audioEnabled.value = false
+            }
+            if (model?.modelFormat == "gguf" && !prefs.contains("selected_backend")) {
+                _selectedBackend.value = LlmInference.Backend.CPU
+                _selectedNpuDeviceId.value = null
             }
         }
     }
@@ -200,7 +200,7 @@ class TranslatorViewModel(application: Application) : AndroidViewModel(applicati
         if (!model.supportsVision) {
             _visionEnabled.value = false
         }
-        if (!model.supportsAudio) {
+        if (!model.hasNativeVoiceSupport()) {
             _audioEnabled.value = false
         }
         
@@ -208,9 +208,9 @@ class TranslatorViewModel(application: Application) : AndroidViewModel(applicati
         if (isGemma4_12B) {
             _selectedBackend.value = LlmInference.Backend.GPU
             _selectedNpuDeviceId.value = null
-        } else if (model.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-            _selectedBackend.value = LlmInference.Backend.GPU
-            _selectedNpuDeviceId.value = "dev0"
+        } else if (model.modelFormat == "gguf") {
+            _selectedBackend.value = LlmInference.Backend.CPU
+            _selectedNpuDeviceId.value = null
         }
 
         saveSettings()
@@ -333,6 +333,8 @@ class TranslatorViewModel(application: Application) : AndroidViewModel(applicati
                 disableAudioOverride = disableAudio,
                 backendOverride = _selectedBackend.value,
                 deviceIdOverride = _selectedNpuDeviceId.value,
+                enableThinkingOverride = _enableThinking.value,
+                disableAgentTools = true,
                 onConfigApplied = { cfg ->
                     lastAppliedModelName = model.name
                     lastAppliedConfig = cfg
@@ -422,6 +424,10 @@ class TranslatorViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 
                 val chatId = "translator-${UUID.randomUUID()}"
+
+                // Apply thinking state from toggle (defaults to false, only togglable for thinking/gpt-oss models)
+                inferenceService.setGenerationParameters(null, null, null, null, enableThinking = _enableThinking.value)
+                (inferenceService as? com.llmhub.llmhub.inference.UnifiedInferenceService)?.setAgentToolsEnabled(false)
 
                 val responseFlow = inferenceService.generateResponseStreamWithSession(
                     prompt = prompt,
@@ -518,9 +524,7 @@ $inputText""".trimIndent()
         val app = getApplication<Application>()
         return withContext(Dispatchers.IO) {
             try {
-                app.contentResolver.openInputStream(uri)?.use { stream ->
-                    BitmapFactory.decodeStream(stream)
-                }
+                loadInferenceBitmap(app, uri)
             } catch (_: Exception) {
                 null
             }

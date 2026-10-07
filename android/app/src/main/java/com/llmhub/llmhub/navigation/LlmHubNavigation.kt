@@ -10,8 +10,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.compose.currentBackStackEntryAsState
-import kotlinx.coroutines.launch
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -19,7 +20,7 @@ import com.llmhub.llmhub.LlmHubApplication
 import com.llmhub.llmhub.screens.*
 import com.llmhub.llmhub.viewmodels.ChatViewModelFactory
 import com.llmhub.llmhub.viewmodels.ThemeViewModel
-import androidx.activity.ComponentActivity
+import com.llmhub.llmhub.R
 import androidx.compose.runtime.collectAsState
 
 sealed class Screen(val route: String) {
@@ -48,6 +49,9 @@ sealed class Screen(val route: String) {
     object Terms : Screen("terms")
     object CreatorGeneration : Screen("creator_generation")
     object Premium : Screen("premium")
+    object Agent : Screen("agent")
+    object TextToSpeech : Screen("text_to_speech")
+    object MusicGenerator : Screen("music_generator")
 }
 
 @Composable
@@ -61,27 +65,22 @@ fun LlmHubNavigation(
         DrawerState(DrawerValue.Closed)
     }
 
-    // Unload chat model only when leaving Chat route (e.g. to Home). Don't unload when switching chat/123 -> chat/new.
+    // Unload model when leaving Chat or Agent route (e.g. to Home).
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    val isOnChatRoute = currentRoute == Screen.Chat.route
-    var wasOnChatRoute by remember { mutableStateOf(isOnChatRoute) }
+    val isMainFeatureRoute = currentRoute == Screen.Chat.route || currentRoute?.startsWith(Screen.Agent.route) == true
+    var wasInMainFeatureRoute by remember { mutableStateOf(isMainFeatureRoute) }
     val context = LocalContext.current
-    val activity = context as? ComponentActivity
-
     // Billing — observe premium status for paywall gating
     val billingManager = (context.applicationContext as LlmHubApplication).billingManager
     val isPremium by billingManager.isPremium.collectAsState()
 
-    // Interstitial — only for free users
-    val interstitialAdManager = (context.applicationContext as LlmHubApplication).interstitialAdManager
-
-    LaunchedEffect(isOnChatRoute) {
-        if (wasOnChatRoute && !isOnChatRoute) {
+    LaunchedEffect(isMainFeatureRoute) {
+        if (wasInMainFeatureRoute && !isMainFeatureRoute) {
             (context.applicationContext as? LlmHubApplication)?.inferenceService?.unloadModel()
             com.llmhub.llmhub.embedding.RagServiceManager.getInstance(context.applicationContext).cleanup()
         }
-        wasOnChatRoute = isOnChatRoute
+        wasInMainFeatureRoute = isMainFeatureRoute
     }
 
     // Helper: navigate to premium or the real destination
@@ -106,9 +105,12 @@ fun LlmHubNavigation(
                         "scam_detector" -> navController.navigate(Screen.ScamDetector.route)
                         "image_generator" -> navigateIfPremium(Screen.ImageGenerator.route)
                         "vibe_coder" -> navigateIfPremium(Screen.VibeCoder.route)
-                        "creator_generation" -> navController.navigate(Screen.CreatorGeneration.route)
-                        "vibevoice" -> navController.navigate(Screen.VibeVoice.route)
+                        "creator_generation" -> navigateIfPremium(Screen.CreatorGeneration.route)
+                        "vibevoice" -> navigateIfPremium(Screen.VibeVoice.route)
                         "image_upscale" -> navController.navigate(Screen.ImageUpscale.route)
+                        "agent" -> navigateIfPremium(Screen.Agent.route)
+                        "text_to_speech" -> navController.navigate(Screen.TextToSpeech.route)
+                        "music_generator" -> navController.navigate(Screen.MusicGenerator.route)
                     }
                 },
                 onNavigateToSettings = {
@@ -153,13 +155,7 @@ fun LlmHubNavigation(
             val chatId = backStackEntry.arguments?.getString("chatId") ?: "new"
             val creatorId = backStackEntry.arguments?.getString("creatorId")
 
-            // Trigger interstitial ad for free users starting a new chat
-            LaunchedEffect(chatId) {
-                if (!isPremium && chatId == "new" && activity != null) {
-                    interstitialAdManager.onNewChatStarted(activity)
-                }
-            }
-            
+
             // We need to pass creatorId to ChatScreen/ViewModel somehow.
             // Since ChatScreen takes a ViewModel, we might need to update ChatScreen signature
             // or rely on ViewModel to handle "new" chat with params.
@@ -334,6 +330,27 @@ fun LlmHubNavigation(
         composable(Screen.Premium.route) {
             PremiumScreen(
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Agent.route) {
+            AgentScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToModels = { navController.navigate(Screen.Models.route) }
+            )
+        }
+
+        composable(Screen.TextToSpeech.route) {
+            TextToSpeechScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
+            )
+        }
+
+        composable(Screen.MusicGenerator.route) {
+            MusicGeneratorScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToModelDownload = { navController.navigate(Screen.Models.route) }
             )
         }
     }

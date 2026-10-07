@@ -94,31 +94,31 @@
 "about_llm_hub" = "О LLM Hub";
 "about_description" = "LLM Hub - это приложение с открытым исходным кодом, которое приносит мощь Больших Языковых Моделей прямо на ваше мобильное устройство. Испытайте ИИ-разговоры с передовыми моделями как Gemma, Llama и Phi - все работают локально на вашем телефоне для максимальной конфиденциальности и доступности офлайн.";
 "key_features" = "Ключевые Особенности";
-"feature_multiple_models" = "🤖 Множественные LLM Модели: Gemma-3, Llama-3.2, Phi-4, и Translate Gemma";
-"feature_on_device" = "📱 Локальная Обработка: Полная конфиденциальность, интернет не требуется";
-"feature_vision_support" = "🖼️ Поддержка Зрения: Мультимодальные модели, понимающие изображения";
-"feature_gpu_acceleration" = "⚡ Ускорение GPU: Оптимизированная производительность на поддерживаемых устройствах";
-"feature_offline_usage" = "💾 Автономное Использование: Общайтесь без подключения к интернету";
-"feature_privacy_first" = "🔒 Конфиденциальность Прежде Всего: Ваши разговоры никогда не покидают устройство";
-"feature_modern_ui" = "🎨 Современный Интерфейс: Чистый, интуитивный интерфейс Material Design";
+"feature_multiple_models" = "Множественные LLM Модели: Gemma-3, Llama-3.2, Phi-4, и Translate Gemma";
+"feature_on_device" = "Локальная Обработка: Полная конфиденциальность, интернет не требуется";
+"feature_vision_support" = "Поддержка Зрения: Мультимодальные модели, понимающие изображения";
+"feature_gpu_acceleration" = "Ускорение GPU: Оптимизированная производительность на поддерживаемых устройствах";
+"feature_offline_usage" = "Автономное Использование: Общайтесь без подключения к интернету";
+"feature_privacy_first" = "Конфиденциальность Прежде Всего: Ваши разговоры никогда не покидают устройство";
+"feature_modern_ui" = "Современный Интерфейс: Чистый, интуитивный интерфейс Material Design";
 "developer_info" = "Информация о Разработчике";
 "about_developer_info" = "Этот проект разрабатывается энтузиастом, увлеченным тем, чтобы сделать ИИ-технологии более доступными для всех. Ваши отзывы и вклад всегда приветствуются!";
 "tech_stack" = "Технологический Стек";
 "about_tech_stack" = "LLM Hub построен с использованием Swift, SwiftUI и библиотеки llama.cpp для эффективного вывода на устройстве.";
-"tech_kotlin_compose" = "🏗️ Построено с Kotlin и Jetpack Compose";
-"tech_mediapipe_litert" = "🧠 Работает на MediaPipe и LiteRT";
-"tech_quantization" = "🚀 Оптимизировано с квантованием INT4/INT8";
-"tech_gpu_acceleration" = "⚡ Ускорение GPU через LiteRT XNNPACK";
-"tech_models_source" = "🔗 Модели от HuggingFace и Google";
+"tech_kotlin_compose" = "Построено с Kotlin и Jetpack Compose";
+"tech_mediapipe_litert" = "Работает на MediaPipe и LiteRT";
+"tech_quantization" = "Оптимизировано с квантованием INT4/INT8";
+"tech_gpu_acceleration" = "Ускорение GPU через LiteRT XNNPACK";
+"tech_models_source" = "Модели от HuggingFace и Google";
 "contact_support" = "Контакт и Поддержка";
 "contact_email" = "Контактный Email:";
 "source_code" = "Исходный Код:";
 "github_repository" = "GitHub Репозиторий";
 "acknowledgments" = "Благодарности";
 "acknowledgments_text" = "Особая благодарность Google, Meta, Microsoft, IBM, и сообществу HuggingFace за предоставление невероятных LLM-моделей, которые питают это приложение. Этот проект также опирается на удивительную работу сообщества разработчиков Android и экосистемы открытого исходного кода.";
-"sd_models_credit" = "Модели генерации изображений работают на основе реализаций Stable Diffusion от xororz с использованием бэкендов Qualcomm QNN (NPU) и Alibaba MNN (CPU).";
+"sd_models_credit" = "Модели генерации изображений работают на основе реализаций Stable Diffusion от xororz с использованием бэкендов Qualcomm QNN (NPU) и CPU.";
 "nexa_sdk_credit" = "Вывод моделей GGUF работает на основе Nexa SDK.";
-"version_number" = "Версия 3.8.3";
+"version_number" = "Версия 4.4.2";
 "ai_thinking" = "ИИ думает...";
 "thinking_label" = "Размышление";
 "thinking_tokens" = "Размышление (%1$d токенов)";
@@ -295,6 +295,9 @@
 "remaining" = "осталось";
 "auto_readout" = "Автоматическое Озвучивание";
 "auto_readout_description" = "Автоматически озвучивать ответы ИИ после отправки сообщения";
+"text_to_speech_voices" = "Голоса преобразования текста в речь";
+"text_to_speech_voices_description" = "Выберите голоса iOS для озвучиваемого содержимого";
+"tts_voices_nav_hint" = "Перейдите в Настройки → Спецвозможности → Чтение и речь → Голоса.";
 "model_supports_multimodal" = "Зрение+Аудио+Текст";
 "multimodal_format" = "%1$@+%2$@+Текст";
 "gemma3n_e2b_gpu_requires_6gb" = "Требуется минимум 6ГБ RAM для GPU";
@@ -338,6 +341,7 @@
 "supports_vision" = "Поддерживает Зрение";
 "supports_audio" = "Поддерживает Аудио";
 "supports_gpu" = "Поддерживает ГПУ";
+"supports_mtp" = "Поддерживает MTP";
 "model_format" = "Формат Модели";
 "context_window_size" = "Размер Контекстного Окна";
 "import_model" = "Импортировать Модель";
@@ -394,7 +398,8 @@
 "translator_auto_detect" = "Автоопределение";
 "translator_translate" = "Перевести";
 "translator_result" = "Перевод";
-"translator_requires_gemma3n" = "Эта функция требует модель Translate Gemma или Gemma 4. Пожалуйста, загрузите её с экрана Модели.";
+"translator_requires_gemma3n" = "Для перевода можно использовать любую LLM-модель. Модели Gemma 4 рекомендуются для наилучшей многоязычной производительности.";
+"translator_load_model_desc" = "Загрузите любую LLM-модель, чтобы начать перевод. Модели Gemma 4 рекомендуются для наилучшей многоязычной производительности.";
 "transcriber_title" = "Офлайн транскрибатор";
 "transcriber_record" = "Записать аудио";
 "transcriber_upload" = "Загрузить аудио";
@@ -472,6 +477,7 @@
 "lang_bulgarian" = "Болгарский";
 "lang_burmese" = "Бирманский";
 "lang_catalan" = "Каталанский";
+"lang_central_kurdish" = "Центральнокурдский (сорани)";
 "lang_chinese" = "Китайский (Упрощённый)";
 "lang_chinese_traditional" = "Китайский (Традиционный)";
 "lang_croatian" = "Хорватский";
@@ -675,7 +681,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub Premium (Навсегда)";
 "premium_subtitle" = "Откройте полный доступ";
-"premium_feature_no_ads" = "Никакой рекламы";
 "premium_feature_vibe_coder" = "VibeCoder — генератор кода на ИИ";
 "premium_feature_image_gen" = "Генератор изображений — ИИ-арт на устройстве";
 "premium_feature_tts" = "Автоматическое озвучивание текста";
@@ -697,8 +702,6 @@
 "premium_restore_success" = "Покупка успешно восстановлена!";
 "premium_restore_nothing" = "Предыдущих покупок не найдено.";
 "premium_go_premium" = "Перейти на Premium";
-"privacy_ads_title" = "Конфиденциальность и реклама";
-"privacy_ads_subtitle" = "Управление персонализацией рекламы и согласиями";
 "export" = "Экспорт";
 "home_section_tools" = "Инструменты";
 "home_section_utilities" = "Утилиты";
@@ -779,5 +782,117 @@
 "whisper_live_transcription" = "Прямая транскрипция с Whisper";
 "whisper_transcribing" = "Транскрипция Whisper…";
 
+"prompt_template_optional" = "Шаблон промпта (Необязательно)";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "Используйте {{SYSTEM}}, {{USER}}, {{ASSISTANT}} как заполнители";
+
 "on_device_ai_engine" = "ЛОКАЛЬНЫЙ ИИ-ДВИЖОК";
 "secure_private" = "БЕЗОПАСНО И КОНФИДЕНЦИАЛЬНО";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "Агент";
+"feature_agent_desc" = "ИИ-ассистент с инструментами и действиями";
+"premium_feature_agent" = "Агент – ИИ с инструментами и действиями";
+"agent_title" = "Агент";
+"agent_subtitle" = "Спроси меня что угодно — я умею искать, строить карты, планировать и многое другое";
+"agent_input_placeholder" = "Спроси агента…";
+"agent_voice_mode_system" = "Системный";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "Выполняется: %@";
+"agent_tool_success" = "Готово";
+"agent_tool_failed" = "Не удалось";
+"agent_tool_confirm_title" = "Разрешить действие?";
+"agent_tool_confirm_body" = "Агент хочет: %@";
+"agent_tool_approve" = "Разрешить";
+"agent_tool_deny" = "Отклонить";
+"agent_no_model" = "Загрузите модель для использования Агента";
+"agent_map_expand" = "Открыть полную карту";
+"agent_settings_voice_mode" = "Режим голосового ввода";
+"agent_settings_tools" = "Включённые инструменты";
+"agent_shortcut_confirm" = "Запустить ярлык: %@";
+"agent_calendar_confirm" = "Создать событие: %@";
+
+"agent_welcome_message" = "Здравствуйте! Я ваш ИИ-агент. Я могу искать в Интернете, показывать карты, управлять событиями в календаре, проверять погоду, устанавливать будильники, отправлять сообщения и вычислять хэши. Чем я могу помочь вам сегодня?";
+"agent_no_model_android" = "Пожалуйста, сначала скачайте модель Gemma 4 E2/4B, чтобы использовать Агента";
+"agent_no_model_ios" = "Пожалуйста, сначала скачайте модель, чтобы использовать Агента";
+
+"open_maps" = "Открыть карты";
+"agent_processing_tool" = "Агент обрабатывает инструмент...";
+
+"premium_feature_vibevoice" = "VibeVoice – ИИ речи и голоса";
+"premium_feature_vibecoder" = "VibeCode – ИИ-конструктор кода";
+"premium_feature_image_generator" = "Генератор изображений – ИИ-арт на устройстве";
+"premium_feature_video_generator" = "Генератор видео – Создание видео с ИИ";
+"search_huggingface" = "Поиск в Hugging Face";
+"search_huggingface_placeholder" = "Поиск моделей GGUF или LiteRT-LM";
+"huggingface_results" = "Результаты Hugging Face";
+"download_vision_projector" = "Скачать проектор зрения";
+"huggingface_search_failed" = "Ошибка поиска Hugging Face";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "Генератор музыки";
+"feature_music_generator_desc" = "Создавайте музыку и звуковые эффекты на устройстве";
+"music_generation_models" = "Модели генерации музыки";
+"music_generation_models_description" = "Локальные ИИ-модели для создания музыкальных треков и звуковых эффектов.";
+"music_prompt_label" = "Описание музыки";
+"prompt_hint_music" = "Опишите музыку или звуковой эффект для генерации...";
+"music_style_presets" = "Стили";
+"music_tier_select" = "Уровень генератора";
+"music_duration_label" = "Длительность";
+"generate_music" = "Создать музыку";
+"generating_music" = "Генерация музыки...";
+"music_prompt_empty_warning" = "Пожалуйста, введите описание музыки, которую хотите создать.";
+"music_generated_success" = "Музыка успешно создана!";
+"music_saved_toast" = "Аудиоклип сохранен в библиотеку!";
+
+"music_generator_download_model" = "Сначала Загрузите Модель";
+"music_generator_download_model_desc" = "Загрузите модель генератора музыки с экрана Модели, чтобы начать создание музыки.";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "Настройки MCP";
+"agent_mcp_title" = "Инструменты MCP";
+"agent_mcp_description" = "Подключайте серверы MCP и разрешайте Агенту использовать их инструменты.";
+"agent_mcp_transport" = "Транспорт";
+"agent_mcp_termux_stdio" = "stdio Termux";
+"agent_mcp_remote_http" = "Удалённый HTTP";
+"agent_mcp_command" = "Команда сервера MCP";
+"agent_mcp_termux_help" = "Запускает сервер MCP через stdio Termux. Сначала установите необходимые пакеты.";
+"agent_mcp_server_url" = "URL сервера";
+"agent_mcp_bearer_token" = "Токен Bearer (необязательно)";
+"agent_mcp_approval_notice" = "Для каждого вызова инструмента MCP требуется ваше подтверждение.";
+"agent_mcp_connecting" = "Подключение…";
+"agent_mcp_connected_tools" = "Подключено инструментов: %d";
+"agent_mcp_error" = "Ошибка MCP: %@";
+"agent_mcp_missing_required_arguments" = "Отсутствуют обязательные аргументы MCP: %@";
+"agent_mcp_connect" = "Подключить";
+"agent_mcp_disconnect" = "Отключить";
+"agent_mcp_tool_request" = "Инструмент MCP: %@";
+"agent_mcp_allow" = "Разрешить";
+"agent_mcp_deny" = "Отклонить";
+"agent_mcp_approval_required" = "Требуется подтверждение";
+"agent_mcp_denied" = "Отклонено пользователем";
+"agent_mcp_status" = "Статус";
+"agent_termux_tool_title" = "Команда оболочки Termux";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "Токен Hugging Face";
+"hf_token_subtitle" = "Личный токен доступа для загрузки моделей";
+"hf_token_dialog_title" = "Токен доступа Hugging Face";
+"hf_token_explanation" = "Если стандартный токен не работает, исчерпал лимит запросов или для загрузки лицензированных моделей введите свой личный токен чтения с huggingface.co/settings/tokens.";
+"hf_token_placeholder" = "Введите личный токен (hf_...)";
+"hf_token_using_default" = "Используется стандартный токен";
+"hf_token_custom_active" = "Пользовательский токен активен";
+"hf_token_clear" = "Сбросить на стандартный";
+
+/* Edit Prompt Template */
+"edit" = "Изменить";
+"prompt_template" = "Шаблон промпта";
+"edit_prompt_template" = "Редактировать шаблон промпта";
+"prompt_template_none" = "Нет (по умолчанию)";

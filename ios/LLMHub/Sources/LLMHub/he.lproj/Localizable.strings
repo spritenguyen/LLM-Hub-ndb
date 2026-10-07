@@ -43,34 +43,34 @@
 "about_llm_hub" = "על LLM Hub";
 "about_description" = "LLM Hub היא אפליקציה בקוד פתוח שמביאה את כוחם של מודלי שפה גדולים ישירות למכשיר הנייד שלך. חווה שיחות AI עם מודלים מתקדמים כמו Gemma, ‏Llama ו-Phi — כולם רצים מקומית על הטלפון שלך לפרטיות מירבית ונגישות לא מקוונת.";
 "key_features" = "תכונות עיקריות";
-"feature_multiple_models" = "🤖 מספר מודלי LLM: ‏Gemma-3, ‏Llama-3.2, ‏Phi-4 ו-Translate Gemma";
-"feature_on_device" = "📱 עיבוד על המכשיר: פרטיות מלאה, ללא צורך באינטרנט";
-"feature_vision_support" = "🖼️ תמיכת ראייה: מודלים מולטימודליים שמבינים תמונות";
-"feature_gpu_acceleration" = "⚡ האצת GPU: ביצועים מיטביים במכשירים נתמכים";
-"feature_offline_usage" = "💾 שימוש לא מקוון: צ\'אט ללא חיבור אינטרנט";
-"feature_privacy_first" = "🔒 פרטיות תחילה: השיחות שלך לא עוזבות את המכשיר";
-"feature_modern_ui" = "🎨 ממשק מודרני: ממשק Material נקי ואינטואיטיבי";
+"feature_multiple_models" = "מספר מודלי LLM: ‏Gemma-3, ‏Llama-3.2, ‏Phi-4 ו-Translate Gemma";
+"feature_on_device" = "עיבוד על המכשיר: פרטיות מלאה, ללא צורך באינטרנט";
+"feature_vision_support" = "תמיכת ראייה: מודלים מולטימודליים שמבינים תמונות";
+"feature_gpu_acceleration" = "האצת GPU: ביצועים מיטביים במכשירים נתמכים";
+"feature_offline_usage" = "שימוש לא מקוון: צ\'אט ללא חיבור אינטרנט";
+"feature_privacy_first" = "פרטיות תחילה: השיחות שלך לא עוזבות את המכשיר";
+"feature_modern_ui" = "ממשק מודרני: ממשק Material נקי ואינטואיטיבי";
 "developer_info" = "מידע למפתח";
 "about_developer_info" = "הפרויקט מפותח על ידי חובב נלהב ששם למטרה להנגיש את טכנולוגיית ה-AI לכולם. משוב ותרומות תמיד יתקבלו בברכה!";
 "tech_stack" = "מחסנית טכנולוגית";
 "about_tech_stack" = "LLM Hub נבנתה עם Swift, ‏SwiftUI וספריית llama.cpp לעיבוד יעיל על המכשיר.";
-"tech_kotlin_compose" = "🏗️ נבנה עם Kotlin ו-Jetpack Compose";
-"tech_mediapipe_litert" = "🧠 מופעל על ידי MediaPipe ו-LiteRT";
-"tech_quantization" = "🚀 אופטימיזציה עם קוונטיזציה ‏INT4/INT8";
-"tech_gpu_acceleration" = "⚡ האצת GPU באמצעות LiteRT XNNPACK";
-"tech_models_source" = "🔗 מודלים מ-HuggingFace ו-Google";
+"tech_kotlin_compose" = "נבנה עם Kotlin ו-Jetpack Compose";
+"tech_mediapipe_litert" = "מופעל על ידי MediaPipe ו-LiteRT";
+"tech_quantization" = "אופטימיזציה עם קוונטיזציה ‏INT4/INT8";
+"tech_gpu_acceleration" = "האצת GPU באמצעות LiteRT XNNPACK";
+"tech_models_source" = "מודלים מ-HuggingFace ו-Google";
 "contact_support" = "יצירת קשר ותמיכה";
 "contact_email" = "דוא\"ל ליצירת קשר:";
 "source_code" = "קוד מקור:";
 "github_repository" = "מאגר GitHub";
 "acknowledgments" = "תודות";
 "acknowledgments_text" = "תודה מיוחדת ל-Google, ‏Meta, ‏Microsoft, IBM וקהילת HuggingFace על המודלים המדהימים שמפעילים את האפליקציה הזו. הפרויקט נשען גם על עבודת קהילת המפתחים לאנדרואיד ועל קוד פתוח.";
-"sd_models_credit" = "מודלים ליצירת תמונות מופעלים על ידי מימושי Stable Diffusion של xororz באמצעות backends של Qualcomm QNN (NPU) ו-Alibaba MNN (CPU).";
+"sd_models_credit" = "מודלים ליצירת תמונות מופעלים על ידי מימושי Stable Diffusion של xororz באמצעות backends של Qualcomm QNN (NPU) ו-CPU.";
 "nexa_sdk_credit" = "הסקת מודלים GGUF מופעלת על ידי Nexa SDK.";
 "ai_thinking" = "ה-AI חושב…";
 "thinking_label" = "חשיבה";
 "thinking_tokens" = "חשיבה (%1$d אסימונים)";
-"version_number" = "גרסה 3.8.3";
+"version_number" = "גרסה 4.4.2";
 "app_version" = "גרסת אפליקציה";
 "terms_of_service" = "תנאי שימוש";
 "tos_last_updated" = "עודכן לאחרונה: 16 ביולי 2025";
@@ -310,6 +310,9 @@
 "clear_all" = "נקה הכל";
 "auto_readout" = "קריאה אוטומטית";
 "auto_readout_description" = "קרא בקול את תגובות ה-AI לאחר שליחת בקשה";
+"text_to_speech_voices" = "קולות טקסט לדיבור";
+"text_to_speech_voices_description" = "בחר קולות iOS עבור תוכן מוקרא";
+"tts_voices_nav_hint" = "עבור אל הגדרות ← נגישות ← קרא ודבר ← קולות.";
 "memory_cleared" = "כל הזיכרונות נוקו";
 "confirm_replace_memory_title" = "להחליף זיכרון קיים?";
 "confirm_replace_memory_message" = "כבר קיים זיכרון גלובלי. החלפתו תמחק את הזיכרון ואת האימבדינגים. להמשיך?";
@@ -358,6 +361,7 @@
 "supports_vision" = "תומך בראייה";
 "supports_audio" = "תומך באודיו";
 "supports_gpu" = "תומך ב-GPU";
+"supports_mtp" = "תומך ב-MTP";
 "model_format" = "פורמט המודל";
 "context_window_size" = "גודל חלון ההקשר";
 "import_model" = "ייבא מודל";
@@ -414,7 +418,8 @@
 "translator_auto_detect" = "זיהוי אוטומטי";
 "translator_translate" = "תרגם";
 "translator_result" = "תרגום";
-"translator_requires_gemma3n" = "תכונה זו דורשת מודל Translate Gemma או Gemma 4. הורד אחד ממסך המודלים.";
+"translator_requires_gemma3n" = "ניתן להשתמש בכל מודל LLM לתרגום. מודלי Gemma 4 מומלצים לביצועים רב-לשוניים מיטביים.";
+"translator_load_model_desc" = "הורד מודל LLM כלשהו כדי להתחיל לתרגם. מודלי Gemma 4 מומלצים לביצועים רב-לשוניים מיטביים.";
 "transcriber_title" = "מתמלל לא מקוון";
 "transcriber_record" = "הקלט אודיו";
 "transcriber_upload" = "העלה אודיו";
@@ -492,6 +497,7 @@
 "lang_bulgarian" = "בולגרית";
 "lang_burmese" = "בורמזית";
 "lang_catalan" = "קטלאנית";
+"lang_central_kurdish" = "כורדית מרכזית (סוראני)";
 "lang_chinese" = "סינית (מפושטת)";
 "lang_chinese_traditional" = "סינית (מסורתית)";
 "lang_croatian" = "קרואטית";
@@ -703,7 +709,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub Premium לכל החיים";
 "premium_subtitle" = "פתח את החווייה המלאה";
-"premium_feature_no_ads" = "ללא פרסומות, לעולם";
 "premium_feature_vibe_coder" = "VibeCoder – מחולל קוד AI";
 "premium_feature_image_gen" = "מחולל תמונות – אמנות AI במכשיר";
 "premium_feature_tts" = "קריאה אוטומטית טקסט לדיבור";
@@ -725,8 +730,6 @@
 "premium_restore_success" = "הרכישה שוחזרה בהצלחה!";
 "premium_restore_nothing" = "לא נמצאו רכישות קודמות.";
 "premium_go_premium" = "עבור ל-Premium";
-"privacy_ads_title" = "פרטיות ומודעות";
-"privacy_ads_subtitle" = "נהל את התאמה אישית של מודעות ובחירות הסכמה";
 "export" = "ייצוא";
 "home_section_tools" = "כלים";
 "home_section_utilities" = "כלי עזר";
@@ -807,5 +810,117 @@
 "whisper_live_transcription" = "תמלול חי עם Whisper";
 "whisper_transcribing" = "מתמלל עם Whisper…";
 
+"prompt_template_optional" = "תבנית פרומפט (אופציונלי)";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "השתמש ב-{{SYSTEM}}, {{USER}}, {{ASSISTANT}} כמצייני מיקום";
+
 "on_device_ai_engine" = "מנוע בינה מלאכותית על המכשיר";
 "secure_private" = "מאובטח ופרטי";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "סוכן";
+"feature_agent_desc" = "עוזר בינה מלאכותית עם כלים ופעולות";
+"premium_feature_agent" = "סוכן – בינה מלאכותית עם כלים ופעולות";
+"agent_title" = "סוכן";
+"agent_subtitle" = "שאל אותי כל שאלה — אני יכול לחפש, למפות, לתזמן ועוד";
+"agent_input_placeholder" = "שאל את הסוכן שלך…";
+"agent_voice_mode_system" = "מערכת";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "מבצע: %@";
+"agent_tool_success" = "הושלם";
+"agent_tool_failed" = "נכשל";
+"agent_tool_confirm_title" = "לאפשר את הפעולה?";
+"agent_tool_confirm_body" = "הסוכן רוצה: %@";
+"agent_tool_approve" = "אפשר";
+"agent_tool_deny" = "דחה";
+"agent_no_model" = "אנא הורד מודל כדי להשתמש בסוכן";
+"agent_map_expand" = "הצג מפה מלאה";
+"agent_settings_voice_mode" = "מצב קלט קולי";
+"agent_settings_tools" = "כלים מופעלים";
+"agent_shortcut_confirm" = "הפעל קיצור דרך: %@";
+"agent_calendar_confirm" = "צור אירוע: %@";
+
+"agent_welcome_message" = "שלום! אני סוכן ה-AI שלך. אני יכול לחפש באינטרנט, להציג מפות, לנהל אירועי לוח שנה, לבדוק מזג אוויר, להגדיר שעונים מעוררים, לשלוח הודעות ולחשב האשים. איך אני יכול לעזור לך היום?";
+"agent_no_model_android" = "אנא הורד תחילה את דגם Gemma 4 E2/4B כדי להשתמש בסוכן";
+"agent_no_model_ios" = "אנא הורד תחילה דגם כדי להשתמש בסוכן";
+
+"open_maps" = "פתח מפות";
+"agent_processing_tool" = "הסוכן מעבד את הכלי...";
+
+"premium_feature_vibevoice" = "VibeVoice – בינה מלאכותית לקול ודיבור";
+"premium_feature_vibecoder" = "VibeCode – בונה קוד בבינה מלאכותית";
+"premium_feature_image_generator" = "מחולל תמונות – אמנות בינה מלאכותית במכשיר";
+"premium_feature_video_generator" = "מחולל וידאו – יצירת וידאו בבינה מלאכותית";
+"search_huggingface" = "חיפוש ב-Hugging Face";
+"search_huggingface_placeholder" = "חיפוש מודלי GGUF או LiteRT-LM";
+"huggingface_results" = "תוצאות Hugging Face";
+"download_vision_projector" = "הורדת מקרן ראייה";
+"huggingface_search_failed" = "חיפוש Hugging Face נכשל";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "מחולל מוזיקה";
+"feature_music_generator_desc" = "צור מוזיקה ואפקטים קוליים ישירות על המכשיר";
+"music_generation_models" = "מודלים ליצירת מוזיקה";
+"music_generation_models_description" = "מודלי בינה מלאכותית ליצירת קטעי שמע ואפקטים קוליים.";
+"music_prompt_label" = "תיאור המוזיקה";
+"prompt_hint_music" = "תאר את המוזיקה או אפקט הקול שברצונך ליצור...";
+"music_style_presets" = "סגנונות מוגדרים מראש";
+"music_tier_select" = "רמת המחולל";
+"music_duration_label" = "משך";
+"generate_music" = "צור מוזיקה";
+"generating_music" = "יוצר מוזיקה...";
+"music_prompt_empty_warning" = "אנא הזן תיאור למוזיקה שברצונך ליצור.";
+"music_generated_success" = "המוזיקה נוצרה בהצלחה!";
+"music_saved_toast" = "קובץ השמע נשמר בספרייה!";
+
+"music_generator_download_model" = "הורד מודל תחילה";
+"music_generator_download_model_desc" = "הורד מודל מחולל מוזיקה ממסך המודלים כדי להתחיל ליצור מוזיקה.";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "הגדרות MCP";
+"agent_mcp_title" = "כלי MCP";
+"agent_mcp_description" = "התחברו לשרתי MCP ואפשרו לסוכן להשתמש בכלים שלהם.";
+"agent_mcp_transport" = "תעבורה";
+"agent_mcp_termux_stdio" = "stdio של Termux";
+"agent_mcp_remote_http" = "HTTP מרוחק";
+"agent_mcp_command" = "פקודת שרת MCP";
+"agent_mcp_termux_help" = "מפעיל את שרת MCP דרך stdio של Termux. יש להתקין תחילה את החבילות הנדרשות.";
+"agent_mcp_server_url" = "כתובת השרת";
+"agent_mcp_bearer_token" = "אסימון Bearer (אופציונלי)";
+"agent_mcp_approval_notice" = "כל הפעלת כלי MCP דורשת את אישורך לפני ההרצה.";
+"agent_mcp_connecting" = "מתחבר…";
+"agent_mcp_connected_tools" = "%d כלים מחוברים";
+"agent_mcp_error" = "שגיאת MCP: %@";
+"agent_mcp_missing_required_arguments" = "ארגומנטים נדרשים של MCP חסרים: %@";
+"agent_mcp_connect" = "התחברות";
+"agent_mcp_disconnect" = "ניתוק";
+"agent_mcp_tool_request" = "כלי MCP: %@";
+"agent_mcp_allow" = "אישור";
+"agent_mcp_deny" = "דחייה";
+"agent_mcp_approval_required" = "נדרש אישור";
+"agent_mcp_denied" = "נדחה על ידי המשתמש";
+"agent_mcp_status" = "מצב";
+"agent_termux_tool_title" = "פקודת מעטפת Termux";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "אסימון Hugging Face";
+"hf_token_subtitle" = "אסימון גישה אישי להורדת מודלים";
+"hf_token_dialog_title" = "אסימון גישה של Hugging Face";
+"hf_token_explanation" = "אם אסימון ברירת המחדל נכשל, מגיע למגבלת קצב או להורדת מודלים הדורשים רישיון מאושר, הזן את אסימון הקריאה האישי שלך מ-huggingface.co/settings/tokens.";
+"hf_token_placeholder" = "הזן אסימון אישי (hf_...)";
+"hf_token_using_default" = "בשימוש אסימון ברירת מחדל";
+"hf_token_custom_active" = "אסימון מותאם אישית פעיל";
+"hf_token_clear" = "איפוס לברירת מחדל";
+
+/* Edit Prompt Template */
+"edit" = "ערוך";
+"prompt_template" = "תבנית הנחיה";
+"edit_prompt_template" = "עריכת תבנית הנחיה";
+"prompt_template_none" = "ללא (ברירת מחדל)";

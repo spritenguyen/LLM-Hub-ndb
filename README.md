@@ -1,6 +1,8 @@
 # LLM Hub 🤖
 
-**LLM Hub** is an open-source mobile app for on-device LLM chat, image generation, and video generation, available for both **Android** and **iOS**. It's optimized for mobile usage (CPU/GPU/NPU acceleration) and supports multiple model formats so you can run powerful models locally and privately.
+**LLM Hub** is an open-source mobile app for on-device LLM chat, image generation, video generation, and music generation, available for both **Android** and **iOS**. It's optimized for mobile usage (CPU/GPU/NPU acceleration) and supports multiple model formats so you can run powerful models locally and privately.
+
+🌟 **Featured:** Featured by **RunAnywhere** on their website — read the [LLM Hub iOS Case Study](https://www.runanywhere.ai/blog/llm-hub-ios-case-study)!
 
 ## Download
 
@@ -25,22 +27,38 @@
 | <img src="vibecode_demo.gif" width="300" style="border-radius:8px;" /> | <img src="android_image_generation_demo.gif" width="300" style="border-radius:8px;" /> |
 | Vibe Coder using Gemma 4 model on iPhone (HTML preview) | Stable Diffusion image generation on Android |
 
+| AI Agent Termux Command Execution on Android | Music Generation on iOS |
+| :-: | :-: |
+| <img src="android_agent_termux_demo.gif" width="300" style="border-radius:8px;" /> | <img src="music_generator_demo.gif" width="300" style="border-radius:8px;" /> |
+| Autonomous AI Agent executing Termux shell commands (`ls` list files) with live terminal output on Android | On-device music generation with Magenta Realtime 2 on iPhone |
+
 ## 🚀 Features
 
 ### 🛠️ AI Tools Suite
 | Tool | Description |
 |------|-------------|
 | **💬 Chat** | Multi-turn conversations with RAG memory, web search, TTS auto-readout, and multimodal input |
+| **🤖 AI Agent** | **[NEW]** Autonomous device agent with function calling, interactive maps, device tools, MCP tools, and Termux terminal command generation on Android |
 | **🤖 creAItor** | **[NEW]** Design custom AI personas with specialized system prompts (PCTF) in seconds |
 | **💻 Vibe Coder** | **[NEW]** Explain your app idea and watch it be built in real-time with live HTML/JS preview |
 | **✍️ Writing Aid** | Summarize, expand, rewrite, improve grammar, or generate code from descriptions |
 | **🎨 Image Generator** | Create images from text prompts using Stable Diffusion 1.5 with swipeable gallery |
+| **🎵 Music Generator** | **[NEW]** Generate music and sound effects locally with SoundGen on Android and Magenta Realtime 2 on iOS |
 | **🔍 Image Upscale** | **[NEW]** Upscale images up to 4× using AI super-resolution models (RealESRGAN, UltraSharp) with NPU acceleration |
 | **🎥 Video Generator** | **[NEW]** Generate videos from text prompts or images using Stable Video Diffusion on iOS |
 | **🌍 Translator** | Translate text, images (OCR), and audio across 50+ languages - offline |
 | **🎙️ Transcriber** | Convert speech to text with on-device processing using Whisper models |
 | **🛡️ Scam Detector** | Analyze messages and images for phishing with risk assessment |
 | **🗣️ VibeVoice** | **[NEW]** Hands-free AI voice chat |
+
+### 🤖 AI Agent & Termux Terminal Command Generation
+The **AI Agent** turns on-device LLMs into autonomous assistants with device function calling capabilities:
+- **Device Actions & Function Calling**: Embedded interactive maps (OpenStreetMap), calendar management, alarm setup, flashlight toggle, SMS & Email composition, cryptographic hashing (SHA-256/MD5), and math calculation.
+- **MCP Tools**: Connect Model Context Protocol (MCP) servers so the Agent can discover and use external tools such as filesystem, search, document, memory, or custom hosted tools. MCP calls require user approval before execution.
+- **Termux Command Generation (Android)**: Automatically drafts shell/CLI commands targeting Termux environment execution (`RUN_COMMAND_SERVICE` intent interface).
+- **Interactive Pre-Execution Editing**: Users can inspect and edit AI-generated shell commands before execution.
+- **Live Dark Terminal Container**: Formats and streams live command outputs (`stdout`/`stderr`) in a dark monospace terminal UI block.
+- **AI Error Auto-Correction Loop**: When a shell command fails or encounters permission/syntax errors, the agent automatically feeds the error logs back into the LLM for self-diagnostics and auto-generates fix commands.
 
 ### 🎙️ Supported ASR Models (Android)
 The offline **Transcriber** feature on Android supports on-device Whisper models for high-accuracy local speech-to-text.
@@ -75,14 +93,15 @@ Quick Start
 
 
 Technology
-- **Android**: Kotlin + Jetpack Compose (Material 3), [GenieX SDK](https://github.com/qualcomm-ai-research/geniex-android) (for LLM and VLM inference), [WhisperKit](https://github.com/argmaxinc/WhisperKitAndroid) (for ASR)
+- **Android**: Kotlin + Jetpack Compose (Material 3), [GenieX SDK](https://github.com/qualcomm/GenieX) (for LLM and VLM inference), [WhisperKit](https://github.com/argmaxinc/WhisperKitAndroid) (for ASR)
 - **iOS**: Swift + SwiftUI, [Run Anywhere SDK](https://github.com/RunanywhereAI/runanywhere-sdks), [Draw Things (MediaGenerationKit)](https://drawthings.ai/), Apple Foundation Model, [whisper.cpp](https://github.com/ggml-org/whisper.cpp) for on-device ASR
 - **LLM & ASR Runtime**: MediaPipe, LiteRT, GenieX SDK (GGUF on Android), WhisperKit (ASR with TFLite + QNN NPU on Android), Llama.cpp (via [Run Anywhere SDK](https://github.com/RunanywhereAI/runanywhere-sdks) on iOS), whisper.cpp on iOS for transcription
 - **Image & Video Gen**: [Draw Things (MediaGenerationKit)](https://drawthings.ai/) (iOS), Qualcomm QNN (Android)
+- **Music Gen**: Magenta Realtime 2 with MLX/LiteRT (iOS), SoundGen with LiteRT (Android)
 
 
 Acknowledgments
-- [GenieX SDK](https://github.com/qualcomm-ai-research/geniex-android) — GGUF model inference support (credit shown in-app About) ⚡
+- [GenieX SDK](https://github.com/qualcomm/GenieX) — GGUF model inference support (credit shown in-app About) ⚡
 - [WhisperKit](https://github.com/argmaxinc/WhisperKitAndroid) — On-device ASR with TFLite + NPU acceleration
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) — On-device ASR/transcription support on iOS
 - [Run Anywhere SDK](https://github.com/RunanywhereAI/runanywhere-sdks) — iOS model runtime and LLM execution framework 🚀
@@ -190,13 +209,6 @@ Support
 
 Notes
 - This README is intentionally concise — consult `ModelData.kt` for exact model variants, sizes, and format details.
-
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=timmyy123/LLM-Hub&type=date&legend=top-left)](https://www.star-history.com/#timmyy123/LLM-Hub&type=date&legend=top-left)
-
-
 
 
 

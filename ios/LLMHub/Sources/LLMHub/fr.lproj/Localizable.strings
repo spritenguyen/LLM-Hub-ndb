@@ -64,12 +64,12 @@
 "github_repository" = "Dépôt GitHub";
 "acknowledgments" = "Remerciements";
 "acknowledgments_text" = "Remerciements spéciaux à Google, Meta, Microsoft, IBM, et à la communauté HuggingFace.";
-"sd_models_credit" = "Les modèles de génération d\'images sont alimentés par les implémentations Stable Diffusion de xororz utilisant les backends Qualcomm QNN (NPU) et Alibaba MNN (CPU).";
+"sd_models_credit" = "Les modèles de génération d\'images sont alimentés par les implémentations Stable Diffusion de xororz utilisant les backends Qualcomm QNN (NPU) et CPU.";
 "nexa_sdk_credit" = "L\'inférence des modèles GGUF est fournie par Nexa SDK.";
 "ai_thinking" = "L\'IA réfléchit...";
 "thinking_label" = "Réflexion";
 "thinking_tokens" = "Réflexion (%1$d jetons)";
-"version_number" = "Version 3.8.3";
+"version_number" = "Version 4.4.2";
 "app_version" = "Version de l\'App";
 "terms_of_service" = "Conditions d\'Utilisation";
 "tos_last_updated" = "Dernière mise à jour : 16 juillet 2025";
@@ -254,6 +254,9 @@
 "remaining" = "restant";
 "auto_readout" = "Lecture Automatique";
 "auto_readout_description" = "Lire automatiquement les réponses de l\'IA à haute voix après l\'envoi d\'un message";
+"text_to_speech_voices" = "Voix de synthèse vocale";
+"text_to_speech_voices_description" = "Choisir les voix iOS pour le contenu lu à voix haute";
+"tts_voices_nav_hint" = "Allez dans Réglages → Accessibilité → Lire et parler → Voix.";
 "translating_tap_to_cancel" = "Traduction en cours (touchez pour annuler)";
 "transcribing_tap_to_cancel" = "Transcription en cours (touchez pour annuler)";
 "image_copied_clipboard" = "Image copiée du chat";
@@ -353,6 +356,7 @@
 "supports_vision" = "Supporte la Vision";
 "supports_audio" = "Supporte l\'Audio";
 "supports_gpu" = "Supporte le GPU";
+"supports_mtp" = "Supporte MTP";
 "model_format" = "Format du Modèle";
 "context_window_size" = "Taille de Fenêtre de Contexte";
 "import_model" = "Importer Modèle";
@@ -428,7 +432,8 @@
 "translator_auto_detect" = "Détection Automatique";
 "translator_translate" = "Traduire";
 "translator_result" = "Traduction";
-"translator_requires_gemma3n" = "Cette fonctionnalité nécessite un modèle Translate Gemma ou Gemma 4. Veuillez en télécharger un depuis l\'écran Modèles.";
+"translator_requires_gemma3n" = "N'importe quel modèle LLM peut être utilisé pour la traduction. Les modèles Gemma 4 sont recommandés pour de meilleures performances multilingues.";
+"translator_load_model_desc" = "Téléchargez n'importe quel modèle LLM pour commencer à traduire. Les modèles Gemma 4 sont recommandés pour de meilleures performances multilingues.";
 "transcriber_title" = "Transcripteur Hors Ligne";
 "transcriber_record" = "Enregistrer l\'Audio";
 "transcriber_upload" = "Téléverser l\'Audio";
@@ -506,6 +511,7 @@
 "lang_bulgarian" = "Bulgare";
 "lang_burmese" = "Birman";
 "lang_catalan" = "Catalan";
+"lang_central_kurdish" = "Kurde central (sorani)";
 "lang_chinese" = "Chinois (Simplifié)";
 "lang_chinese_traditional" = "Chinois (Traditionnel)";
 "lang_croatian" = "Croate";
@@ -690,7 +696,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub Premium Lifetime";
 "premium_subtitle" = "Déverrouillez l’expérience complète";
-"premium_feature_no_ads" = "Aucune publicité, jamais";
 "premium_feature_vibe_coder" = "VibeCoder – Générateur de code IA";
 "premium_feature_image_gen" = "Générateur d’images – art IA sur l’appareil";
 "premium_feature_tts" = "Lecture automatique texte-parole";
@@ -712,8 +717,6 @@
 "premium_restore_success" = "Achat restauré avec succès !";
 "premium_restore_nothing" = "Aucun achat antérieur trouvé.";
 "premium_go_premium" = "Passer Premium";
-"privacy_ads_title" = "Confidentialité et publicités";
-"privacy_ads_subtitle" = "Gérer la personnalisation des publicités et vos choix de consentement";
 "export" = "Exporter";
 "home_section_tools" = "Outils";
 "home_section_utilities" = "Utilitaires";
@@ -794,5 +797,117 @@
 "whisper_live_transcription" = "Transcription en direct avec Whisper";
 "whisper_transcribing" = "Transcription Whisper en cours…";
 
+"prompt_template_optional" = "Modèle de Prompt (Optionnel)";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "Utilisez {{SYSTEM}}, {{USER}}, {{ASSISTANT}} comme espaces réservés";
+
 "on_device_ai_engine" = "MOTEUR D'IA SUR L'APPAREIL";
 "secure_private" = "SÉCURISÉ & PRIVÉ";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "Agent";
+"feature_agent_desc" = "Assistant IA avec outils et actions";
+"premium_feature_agent" = "Agent – IA avec outils et actions";
+"agent_title" = "Agent";
+"agent_subtitle" = "Demandez-moi n'importe quoi — je peux chercher, cartographier, planifier et plus";
+"agent_input_placeholder" = "Demandez à votre agent…";
+"agent_voice_mode_system" = "Système";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "En cours: %@";
+"agent_tool_success" = "Terminé";
+"agent_tool_failed" = "Échoué";
+"agent_tool_confirm_title" = "Autoriser l'action ?";
+"agent_tool_confirm_body" = "L'agent veut: %@";
+"agent_tool_approve" = "Autoriser";
+"agent_tool_deny" = "Refuser";
+"agent_no_model" = "Veuillez télécharger un modèle pour utiliser l'Agent";
+"agent_map_expand" = "Voir la carte complète";
+"agent_settings_voice_mode" = "Mode saisie vocale";
+"agent_settings_tools" = "Outils activés";
+"agent_shortcut_confirm" = "Exécuter le raccourci: %@";
+"agent_calendar_confirm" = "Créer un événement: %@";
+
+"agent_welcome_message" = "Bonjour ! Je suis votre Agent IA. Je peux rechercher sur le Web, afficher des cartes, gérer les événements du calendrier, consulter la météo, régler des alarmes, envoyer des messages et calculer des hachages. Comment puis-je vous aider aujourd'hui ?";
+"agent_no_model_android" = "Veuillez d'abord télécharger le modèle Gemma 4 E2/4B pour utiliser l'Agent";
+"agent_no_model_ios" = "Veuillez d'abord télécharger un modèle pour utiliser l'Agent";
+
+"open_maps" = "Ouvrir les cartes";
+"agent_processing_tool" = "L’agent traite l’outil...";
+
+"premium_feature_vibevoice" = "VibeVoice – IA vocale & parole";
+"premium_feature_vibecoder" = "VibeCode – Générateur de code IA";
+"premium_feature_image_generator" = "Générateur d'images – Art IA sur l'appareil";
+"premium_feature_video_generator" = "Générateur de vidéo – Création vidéo par IA";
+"search_huggingface" = "Rechercher sur Hugging Face";
+"search_huggingface_placeholder" = "Rechercher des modèles GGUF ou LiteRT-LM";
+"huggingface_results" = "Résultats Hugging Face";
+"download_vision_projector" = "Télécharger le projecteur de vision";
+"huggingface_search_failed" = "Échec de la recherche Hugging Face";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "Générateur de Musique";
+"feature_music_generator_desc" = "Générez de la musique et des effets sonores sur l'appareil";
+"music_generation_models" = "Modèles de Génération Musicale";
+"music_generation_models_description" = "Modèles d'IA hors ligne pour créer des pistes musicales et des effets sonores.";
+"music_prompt_label" = "Description de la musique";
+"prompt_hint_music" = "Décrivez la musique ou l'effet sonore à générer...";
+"music_style_presets" = "Styles prédéfinis";
+"music_tier_select" = "Niveau du générateur";
+"music_duration_label" = "Durée";
+"generate_music" = "Générer de la Musique";
+"generating_music" = "Génération en cours...";
+"music_prompt_empty_warning" = "Veuillez saisir une description pour la musique à générer.";
+"music_generated_success" = "Musique générée avec succès !";
+"music_saved_toast" = "Fichier audio enregistré dans la bibliothèque locale !";
+
+"music_generator_download_model" = "Télécharger le Modèle d'Abord";
+"music_generator_download_model_desc" = "Téléchargez un modèle de génération de musique depuis l'écran Modèles pour commencer.";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "Réglages MCP";
+"agent_mcp_title" = "Outils MCP";
+"agent_mcp_description" = "Connectez des serveurs MCP et autorisez l’Agent à utiliser leurs outils.";
+"agent_mcp_transport" = "Transport";
+"agent_mcp_termux_stdio" = "stdio Termux";
+"agent_mcp_remote_http" = "HTTP distant";
+"agent_mcp_command" = "Commande du serveur MCP";
+"agent_mcp_termux_help" = "Exécute le serveur MCP via stdio dans Termux. Installez d’abord les paquets requis.";
+"agent_mcp_server_url" = "URL du serveur";
+"agent_mcp_bearer_token" = "Jeton Bearer (facultatif)";
+"agent_mcp_approval_notice" = "Chaque appel d’outil MCP nécessite votre autorisation avant son exécution.";
+"agent_mcp_connecting" = "Connexion…";
+"agent_mcp_connected_tools" = "%d outils connectés";
+"agent_mcp_error" = "Erreur MCP : %@";
+"agent_mcp_missing_required_arguments" = "Arguments MCP obligatoires manquants : %@";
+"agent_mcp_connect" = "Connecter";
+"agent_mcp_disconnect" = "Déconnecter";
+"agent_mcp_tool_request" = "Outil MCP : %@";
+"agent_mcp_allow" = "Autoriser";
+"agent_mcp_deny" = "Refuser";
+"agent_mcp_approval_required" = "Autorisation requise";
+"agent_mcp_denied" = "Refusé par l’utilisateur";
+"agent_mcp_status" = "État";
+"agent_termux_tool_title" = "Commande shell Termux";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "Jeton Hugging Face";
+"hf_token_subtitle" = "Jeton d'accès personnel pour le téléchargement de modèles";
+"hf_token_dialog_title" = "Jeton d'accès Hugging Face";
+"hf_token_explanation" = "Si le jeton par défaut échoue, atteint des limites de débit ou pour télécharger des modèles sous licence acceptée, saisissez votre jeton de lecture personnel depuis huggingface.co/settings/tokens.";
+"hf_token_placeholder" = "Saisir un jeton personnel (hf_...)";
+"hf_token_using_default" = "Jeton par défaut utilisé";
+"hf_token_custom_active" = "Jeton personnalisé actif";
+"hf_token_clear" = "Rétablir par défaut";
+
+/* Edit Prompt Template */
+"edit" = "Modifier";
+"prompt_template" = "Modèle de Prompt";
+"edit_prompt_template" = "Modifier le modèle de prompt";
+"prompt_template_none" = "Aucun (par défaut)";

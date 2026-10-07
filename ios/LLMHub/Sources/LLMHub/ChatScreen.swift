@@ -1,7 +1,6 @@
 import AVFoundation
 import Foundation
 import PhotosUI
-import RunAnywhere
 import Speech
 import SwiftUI
 import UIKit
@@ -16,18 +15,33 @@ import ImageIO
 
 // MARK: - Web Search Service
 
-private struct WebSearchResult {
+struct WebSearchResult {
     let title: String
     let snippet: String
     let url: String
     let source: String
 }
 
-private actor WebSearchService {
+struct URLReaderResult {
+    let title: String
+    let url: String
+    let text: String
+    let source: String
+    let truncated: Bool
+}
+
+actor WebSearchService {
     static let shared = WebSearchService()
 
     // Firefox mobile UA — same as Android build, avoids DuckDuckGo bot blocks
     private static let firefoxUA = "Mozilla/5.0 (Android 10; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0"
+    private static let maxResponseBytes = 2_000_000
+    private static let defaultReaderChars = 8_000
+    private static let searchContextChars = 2_500
+    private static let cacheLifetime: TimeInterval = 10 * 60
+
+    private struct CachedArticle { let article: URLReaderResult; let savedAt: Date }
+    private var articleCache: [String: CachedArticle] = [:]
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -62,13 +76,12 @@ private actor WebSearchService {
     private func searchWithContent(query: String, maxResults: Int) async -> [WebSearchResult] {
         // If query contains a URL, fetch that page directly
         if let directURL = extractURL(from: query) {
-            let content = await fetchPageContent(urlString: directURL)
-            if !content.isEmpty {
+            if let article = await readURL(directURL, maxChars: Self.defaultReaderChars) {
                 return [WebSearchResult(
-                    title: "Content from \(domain(directURL))",
-                    snippet: content,
-                    url: directURL,
-                    source: domain(directURL)
+                    title: article.title,
+                    snippet: article.text,
+                    url: article.url,
+                    source: article.source
                 )]
             }
         }
@@ -80,13 +93,12 @@ private actor WebSearchService {
         var results: [WebSearchResult] = []
         for item in urlData {
             if results.count >= maxResults { break }
-            let content = await fetchPageContent(urlString: item.url)
-            guard !content.isEmpty else { continue }
+            guard let article = await readURL(item.url, maxChars: Self.searchContextChars) else { continue }
             results.append(WebSearchResult(
-                title: item.title,
-                snippet: String(content.prefix(500)),
-                url: item.url,
-                source: domain(item.url)
+                title: article.title.isEmpty ? item.title : article.title,
+                snippet: article.text,
+                url: article.url,
+                source: article.source
             ))
         }
         return results
@@ -149,24 +161,66 @@ private actor WebSearchService {
         return results
     }
 
-    private func fetchPageContent(urlString: String) async -> String {
-        guard let url = URL(string: urlString) else { return "" }
+    /// Reads and cleans a page on-device. This deliberately does not use Jina or any reader proxy.
+    func readURL(_ urlString: String, maxChars: Int = 8_000) async -> URLReaderResult? {
+        guard let url = safeWebURL(urlString) else { return nil }
+        let cacheKey = url.absoluteString
+        if let cached = articleCache[cacheKey], Date().timeIntervalSince(cached.savedAt) < Self.cacheLifetime {
+            return URLReaderResult(
+                title: cached.article.title, url: cached.article.url,
+                text: String(cached.article.text.prefix(maxChars)), source: cached.article.source,
+                truncated: cached.article.text.count > maxChars
+            )
+        }
+
         var req = URLRequest(url: url)
         req.setValue(Self.firefoxUA, forHTTPHeaderField: "User-Agent")
+        req.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 8
 
         guard let (data, resp) = try? await session.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let http = resp as? HTTPURLResponse,
+              http.statusCode == 200,
+              http.mimeType?.lowercased() == "text/html",
+              data.count <= Self.maxResponseBytes,
               let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
-        else { return "" }
+        else { return nil }
 
-        return extractTextFromHTML(html)
+        let text = extractTextFromHTML(html, maxChars: Self.defaultReaderChars)
+        guard !text.isEmpty else { return nil }
+        let finalURL = http.url?.absoluteString ?? url.absoluteString
+        let article = URLReaderResult(
+            title: extractTitle(from: html).isEmpty ? "Content from \(domain(finalURL))" : extractTitle(from: html),
+            url: finalURL, text: text, source: domain(finalURL),
+            truncated: text.count >= Self.defaultReaderChars
+        )
+        articleCache[cacheKey] = CachedArticle(article: article, savedAt: Date())
+        return URLReaderResult(title: article.title, url: article.url, text: String(article.text.prefix(maxChars)), source: article.source, truncated: article.text.count > maxChars)
     }
 
-    private func extractTextFromHTML(_ html: String) -> String {
+    private func safeWebURL(_ value: String) -> URL? {
+        guard let url = URL(string: value), let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme), let host = url.host?.lowercased(),
+              host != "localhost", !host.hasSuffix(".local"), !host.hasPrefix("127."), host != "0.0.0.0", host != "::1"
+        else { return nil }
+        return url
+    }
+
+    private func extractTitle(from html: String) -> String {
+        guard let re = try? NSRegularExpression(pattern: #"<title[^>]*>(.*?)</title>"#, options: [.caseInsensitive, .dotMatchesLineSeparators]),
+              let match = re.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+              let range = Range(match.range(at: 1), in: html)
+        else { return "" }
+        return String(cleanHTML(String(html[range])).prefix(200))
+    }
+
+    private func extractTextFromHTML(_ html: String, maxChars: Int) -> String {
         var s = html
         // Strip scripts and styles
         if let re = try? NSRegularExpression(pattern: "<(script|style)[^>]*>.*?</(script|style)>", options: .dotMatchesLineSeparators) {
+            s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+        }
+        if let re = try? NSRegularExpression(pattern: "<(nav|header|footer|aside)[^>]*>.*?</\\1>", options: [.caseInsensitive, .dotMatchesLineSeparators]) {
             s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
         }
         s = cleanHTML(s)
@@ -177,7 +231,7 @@ private actor WebSearchService {
                    && !$0.lowercased().contains("click")
                    && !$0.lowercased().contains("menu")
                    && !$0.lowercased().contains("navigation") }
-        return String(sentences.prefix(5).joined(separator: ". ").prefix(1000))
+        return String(sentences.joined(separator: ". ").prefix(maxChars))
     }
 
     private func isValidContentURL(_ url: String) -> Bool {
@@ -392,7 +446,7 @@ private func chatAppleFoundationModelIfAvailable() -> AIModel? {
             supportsGpu: true,
             requirements: ModelRequirements(minRamGB: 8, recommendedRamGB: 8),
             contextWindowSize: max(4096, model.contextSize),
-            modelFormat: .gguf,
+            modelFormat: .platform,
             additionalFiles: []
         )
     }
@@ -403,7 +457,9 @@ private func chatAppleFoundationModelIfAvailable() -> AIModel? {
 
 @MainActor
 private func chatModel(named modelName: String) -> AIModel? {
-    if let model = ModelData.allModels().first(where: { $0.name == modelName }) {
+    if let model = ModelData.allModels().first(where: {
+        $0.name == modelName && $0.isLanguageModel && !$0.isDependencyOnly
+    }) {
         return model
     }
     if let appleModel = chatAppleFoundationModelIfAvailable(), appleModel.name == modelName {
@@ -621,18 +677,27 @@ class ChatViewModel: ObservableObject {
     )
 
     @Published var inputText: String = ""
+    /// Set by the view layer to indicate the user has scrolled away from the
+    /// generating message. When true, streaming UI updates are throttled to
+    /// ~8fps to avoid layout thrashing on off-screen content.
+    var viewIsScrolledUp: Bool = false
+
+    private var streamThrottleTask: Task<Void, Never>?
+    private var pendingStreamUpdate: (() -> Void)?
+
     @Published var isGenerating: Bool = false {
         didSet {
             // When generation ends, flush the streamed content to disk. We skip
             // saves during streaming to avoid JSON encode storms that can make
             // SwiftUI's LazyVStack render blank briefly on big chats.
             if oldValue == true && isGenerating == false {
+                flushThrottledStreamUpdate()
                 chatStore.saveSessions()
             }
         }
     }
-    @Published var tokensPerSecond: Double = 0
-    @Published var totalTokens: Int = 0
+    var tokensPerSecond: Double = 0
+    var totalTokens: Int = 0
     @Published var selectedModelName: String = AppSettings.shared.localized("no_model_selected") {
         didSet {
             guard selectedModelName != oldValue else { return }
@@ -767,6 +832,12 @@ class ChatViewModel: ObservableObject {
         contextUsageFractionRaw >= 0.995
     }
     
+    private func setMessagesSilently(_ newValue: [ChatMessage]) {
+        if let index = chatStore.chatSessions.firstIndex(where: { $0.id == currentSessionId }) {
+            chatStore.chatSessions[index].messages = newValue
+        }
+    }
+
     var messages: [ChatMessage] {
         get {
             chatStore.chatSessions.first(where: { $0.id == currentSessionId })?.messages ?? []
@@ -787,20 +858,12 @@ class ChatViewModel: ObservableObject {
     }
 
     init() {
-        do {
-            try RunAnywhere.initialize(environment: .development)
-        } catch {
-            // Ignore repeated initialization attempts.
-        }
-
-        Task {
-            _ = await RunAnywhere.discoverDownloadedModels()
-        }
-
         settingsByModelId = Self.loadPerModelSettings(from: userDefaults)
 
         if let savedModelName = userDefaults.string(forKey: PersistenceKeys.selectedModelName),
-           !savedModelName.isEmpty {
+           !savedModelName.isEmpty,
+           let savedModel = chatModel(named: savedModelName),
+           !savedModel.name.hasPrefix("Translate Gemma") {
             selectedModelName = savedModelName
         }
 
@@ -990,8 +1053,9 @@ class ChatViewModel: ObservableObject {
         if defaults.object(forKey: PersistenceKeys.enableAudio) != nil {
             settings.enableAudio = defaults.bool(forKey: PersistenceKeys.enableAudio)
         }
-        // Thinking is always enabled for thinking-capable models — no toggle.
-        settings.enableThinking = true
+        if defaults.object(forKey: PersistenceKeys.enableThinking) != nil {
+            settings.enableThinking = defaults.bool(forKey: PersistenceKeys.enableThinking)
+        }
         if defaults.object(forKey: PersistenceKeys.enableAgentTools) != nil {
             settings.enableAgentTools = defaults.bool(forKey: PersistenceKeys.enableAgentTools)
         }
@@ -1013,6 +1077,8 @@ class ChatViewModel: ObservableObject {
         let input = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return false }
         guard !isGenerating else { return false }
+
+        stopAutoReadout()
 
         let userMsg = ChatMessage(content: input, isFromUser: true, attachmentDocumentName: documentName)
         messages.append(userMsg)
@@ -1113,7 +1179,7 @@ class ChatViewModel: ObservableObject {
                 systemPrompt = ragContextPrefix.isEmpty ? "" : ragContextPrefix
             } else {
                 let resultsText = searchResults.enumerated().map { i, r in
-                    "SOURCE: \(r.source)\nTITLE: \(r.title)\nCONTENT: \(r.snippet)\n---"
+                    "SOURCE: \(r.source)\nTITLE: \(r.title)\nURL: \(r.url)\nCONTENT: \(r.snippet)\n---"
                 }.joined(separator: "\n\n")
 
                 systemPrompt = """
@@ -1128,6 +1194,7 @@ class ChatViewModel: ObservableObject {
                 - If the search results don't contain enough information, say so clearly
                 - For dates and events, be specific based on what you find in the results
                 - Do not make up information not found in the search results
+                - Cite factual claims with the provided source URLs when possible
                 """
             }
 
@@ -1142,7 +1209,10 @@ class ChatViewModel: ObservableObject {
                         self.updateLastAIMessageSync(content: content, tokens: tokens, tps: tps)
                     }
                 }
-                await MainActor.run { self.finishGeneratingMessage() }
+                await MainActor.run {
+                    self.appendWebSources(searchResults)
+                    self.finishGeneratingMessage()
+                }
             } catch {
                 await updateLastAIMessage(content: "Error: \(error.localizedDescription)", isGenerating: false)
             }
@@ -1197,8 +1267,12 @@ class ChatViewModel: ObservableObject {
             return ""
         }()
 
-        let projectedChars = messages.reduce(0) { $0 + $1.content.count } + generationPrompt.count
-        let projectedTokens = Double(projectedChars) / 4.0
+        // Use the reset-aware approximateContextTokensUsed as the baseline so that
+        // after a context reset the projected fraction starts from 0 (only new messages),
+        // not from all-time total. Without this, projectedFraction stays ≥ 99.5% forever
+        // after the first reset, causing every subsequent send to also reset.
+        let newPromptTokens = Double(generationPrompt.count) / 4.0
+        let projectedTokens = approximateContextTokensUsed + newPromptTokens
         let projectedFraction = contextBudgetForRing > 0 ? (projectedTokens / contextBudgetForRing) : 0
         let shouldResetInferenceContext = (isContextBudgetExceededForSession || projectedFraction >= 0.995) && !messages.isEmpty
 
@@ -1407,17 +1481,47 @@ class ChatViewModel: ObservableObject {
             }
             msgs[idx].content = normalizedContent
             msgs[idx].isGenerating = isGenerating
-            self.totalTokens = tokens
-            self.tokensPerSecond = tps
             msgs[idx].tokenCount = tokens > 0 ? tokens : msgs[idx].tokenCount
             msgs[idx].tokensPerSecond = tps > 0 ? tps : msgs[idx].tokensPerSecond
-            self.messages = msgs
+
+            if isGenerating && viewIsScrolledUp {
+                setMessagesSilently(msgs)
+                scheduleThrottledStreamUpdate { [weak self] in
+                    guard let self else { return }
+                    self.totalTokens = tokens
+                    self.tokensPerSecond = tps
+                    self.objectWillChange.send()
+                }
+            } else {
+                self.totalTokens = tokens
+                self.tokensPerSecond = tps
+                self.messages = msgs
+            }
 
             // Progressive TTS: speak completed sentences as they stream in
             if isGenerating {
                 progressiveTTSUpdate(fullContent: normalizedContent, messageKey: msgs[idx].id.uuidString)
             }
         }
+    }
+
+    private func scheduleThrottledStreamUpdate(_ update: @escaping () -> Void) {
+        pendingStreamUpdate = update
+        guard streamThrottleTask == nil else { return }
+        streamThrottleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000) // ~2fps while scrolled away
+            guard let self, !Task.isCancelled else { return }
+            self.pendingStreamUpdate?()
+            self.pendingStreamUpdate = nil
+            self.streamThrottleTask = nil
+        }
+    }
+
+    func flushThrottledStreamUpdate() {
+        streamThrottleTask?.cancel()
+        streamThrottleTask = nil
+        pendingStreamUpdate = nil
+        objectWillChange.send()
     }
 
     private func normalizeStreamText(_ text: String) -> String {
@@ -1497,6 +1601,14 @@ class ChatViewModel: ObservableObject {
         activeGeneratingMessageId = nil
     }
 
+    private func appendWebSources(_ results: [WebSearchResult]) {
+        let unique = Dictionary(grouping: results.filter { URL(string: $0.url)?.scheme != nil }, by: \.url).compactMap { $0.value.first }
+        guard !unique.isEmpty else { return }
+        let sources = unique.map { "- [\($0.title.isEmpty ? $0.source : $0.title)](\($0.url))" }.joined(separator: "\n")
+        guard let idx = messages.indices.last, !messages[idx].isFromUser, !messages[idx].content.contains("\n### Sources\n") else { return }
+        messages[idx].content += "\n\n### Sources\n\(sources)"
+    }
+
     func stopGeneration() {
         streamingTask?.cancel()
         streamingTask = nil
@@ -1530,9 +1642,6 @@ class ChatViewModel: ObservableObject {
         contextResetStartBySessionId[session.id] = 0
         ragDocumentCount = 0
         objectWillChange.send()
-
-        // Fire interstitial ad (skipped for premium users, every 4th new chat)
-        InterstitialAdManager.shared.onEvent()
 
         // Populate new chat with global memory so RAG search includes it.
         if isMemoryEnabled {
@@ -1658,9 +1767,14 @@ class ChatViewModel: ObservableObject {
         guard AppSettings.shared.autoReadoutEnabled else { return }
 
         // Strip thinking tokens — only speak the answer portion
+        let modelSupportsThinking = chatModel(named: selectedModelName)?.supportsThinking == true
+        let isThinkingActive = modelSupportsThinking && enableThinking && supportsUnmarkedStreamingThinkingHeuristic(forModelNamed: selectedModelName)
         let displayContent: String
         if contentHasThinkingMarkers(fullContent) {
             displayContent = getDisplayContentWithoutThinking(fullContent)
+        } else if isThinkingActive {
+            // Opening <think> was in prompt; </think> not reached yet, so still in thinking phase
+            displayContent = ""
         } else {
             displayContent = fullContent
         }
@@ -1683,9 +1797,13 @@ class ChatViewModel: ObservableObject {
         guard AppSettings.shared.autoReadoutEnabled else { return }
 
         // Feed any final delta that may not have been processed yet
+        let modelSupportsThinking = chatModel(named: selectedModelName)?.supportsThinking == true
+        let isThinkingActive = modelSupportsThinking && enableThinking && supportsUnmarkedStreamingThinkingHeuristic(forModelNamed: selectedModelName)
         let displayContent: String
         if contentHasThinkingMarkers(fullContent) {
             displayContent = getDisplayContentWithoutThinking(fullContent)
+        } else if isThinkingActive {
+            displayContent = ""
         } else {
             displayContent = fullContent
         }
@@ -1716,33 +1834,170 @@ class ChatViewModel: ObservableObject {
     /// fake "User:" / "Assistant:" exchanges).
     private func stopSequencesForCurrentModel() -> [String] {
         let modelName = selectedModelName.lowercased()
-        let isGemma  = modelName.contains("gemma")
-        let isLlama  = modelName.contains("llama") || modelName.contains("mistral")
+        let isGemma   = modelName.contains("gemma")
+        let isLlama   = modelName.contains("llama") || modelName.contains("mistral")
+        let isLlama3  = isLlama && (modelName.contains("llama-3") || modelName.contains("llama 3") || modelName.contains("llama-3."))
         let isHarmony = modelName.contains("gpt-oss") || modelName.contains("gpt_oss")
+        let isMuseGlimmer = chatModel(named: selectedModelName)?.chatTemplateFamily == .museGlimmer
+        let isGranite42 = modelName.contains("granite-4.2") || modelName.contains("granite 4.2")
+        let isGranite = modelName.contains("granite") && !isGranite42
+        let isPhi4    = modelName.contains("phi-4") || modelName.contains("phi 4") || modelName.contains("phi4")
+        let isChatML  = modelName.contains("lfm") || modelName.contains("liquid")
 
         if isGemma {
-            // Gemma uses special tokens handled by the tokenizer
             return []
+        } else if isLlama3 {
+            return ["<|eot_id|>"]
         } else if isLlama {
             return ["[INST]"]
         } else if isHarmony {
             return ["<|start|>user"]
+        } else if isMuseGlimmer {
+            // <|eom|> separates Muse's private reasoning from its user-facing
+            // answer, so only stop at the actual end-of-turn marker.
+            return ["<|eot|>"]
+        } else if isGranite42 {
+            return ["<|im_end|>", "<|im_start|>user", "<|im_start|>system"]
+        } else if isGranite {
+            return ["<|start_of_role|>user", "<|start_of_role|>system"]
+        } else if isPhi4 {
+            return ["<|end|>", "<|user|>", "<|system|>"]
+        } else if isChatML {
+            return ["<|im_start|>user", "<|im_start|>system"]
         } else {
-            // Generic User:/Assistant: template (LFM, Phi, Qwen, etc.)
             return ["\nUser:", "\nuser:"]
         }
     }
 
+    private func buildCustomTemplatePrompt(template: String, currentUserPrompt: String, ragPrefix: String? = nil) -> String {
+        let resetStart = contextResetStartBySessionId[currentSessionId] ?? 0
+        let allHistory: [ChatMessage] = messages.count >= 2 ? Array(messages.dropLast(2)) : []
+        var history: [ChatMessage] = resetStart > 0 ? Array(allHistory.dropFirst(min(resetStart, allHistory.count))) : allHistory
+
+        let effectiveCtxTokens = llmBackend.loadedContextWindow ?? max(512, Int(contextWindow))
+        let currentPromptTokensEstimate = max(32, currentUserPrompt.count / 3)
+        let ragTokensEstimate = (ragPrefix?.count ?? 0) / 3
+        let reservedForResponse = max(256, min(Int(maxTokens), effectiveCtxTokens / 4))
+        let reservedForCurrent = currentPromptTokensEstimate + ragTokensEstimate + 64
+        let availableHistoryTokens = max(128, effectiveCtxTokens - reservedForResponse - reservedForCurrent - 128)
+        let maxHistoryChars = availableHistoryTokens * 3
+        var currentChars = 0
+        var truncatedHistory: [ChatMessage] = []
+
+        for msg in history.reversed() {
+            let rawContent: String
+            if !msg.isFromUser && contentHasThinkingMarkers(msg.content) {
+                rawContent = getDisplayContentWithoutThinking(msg.content)
+            } else {
+                rawContent = msg.content
+            }
+            let effectiveLen = rawContent.count
+            let remaining = maxHistoryChars - currentChars
+            if effectiveLen <= remaining {
+                truncatedHistory.insert(msg, at: 0)
+                currentChars += effectiveLen
+            } else if remaining > 300 {
+                let half = remaining / 2
+                var elided = msg
+                elided.content = String(rawContent.prefix(half)) + "\n…\n" + String(rawContent.suffix(half))
+                truncatedHistory.insert(elided, at: 0)
+                break
+            } else {
+                break
+            }
+        }
+
+        // Template uses {{SYSTEM}}, {{USER}}, {{ASSISTANT}} as placeholders.
+        // Build prompt by applying the template to each turn.
+        var parts: [String] = ["__RAW_PROMPT__"]
+
+        if let rag = ragPrefix, !rag.isEmpty {
+            let systemTurn = template
+                .replacingOccurrences(of: "{{SYSTEM}}", with: rag)
+                .replacingOccurrences(of: "{{USER}}", with: "")
+                .replacingOccurrences(of: "{{ASSISTANT}}", with: "")
+            if template.contains("{{SYSTEM}}") {
+                parts.append(systemTurn)
+            } else {
+                // No system placeholder — inject as first user turn
+                let userTurn = template.replacingOccurrences(of: "{{USER}}", with: rag)
+                    .replacingOccurrences(of: "{{SYSTEM}}", with: "")
+                    .replacingOccurrences(of: "{{ASSISTANT}}", with: "")
+                parts.append(userTurn)
+            }
+        }
+
+        for msg in truncatedHistory {
+            let rawContent = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let content: String
+            if msg.isFromUser {
+                content = rawContent
+            } else {
+                let answer = getDisplayContentWithoutThinking(rawContent)
+                content = answer.isEmpty ? rawContent : answer
+            }
+            guard !content.isEmpty else { continue }
+
+            if msg.isFromUser {
+                let turn = template.replacingOccurrences(of: "{{USER}}", with: content)
+                    .replacingOccurrences(of: "{{SYSTEM}}", with: "")
+                    .replacingOccurrences(of: "{{ASSISTANT}}", with: "")
+                parts.append(turn)
+            } else {
+                let turn = template.replacingOccurrences(of: "{{ASSISTANT}}", with: content)
+                    .replacingOccurrences(of: "{{USER}}", with: "")
+                    .replacingOccurrences(of: "{{SYSTEM}}", with: "")
+                parts.append(turn)
+            }
+        }
+
+        // Current user prompt + assistant prefix
+        let userTurn = template.replacingOccurrences(of: "{{USER}}", with: currentUserPrompt)
+            .replacingOccurrences(of: "{{SYSTEM}}", with: "")
+            .replacingOccurrences(of: "{{ASSISTANT}}", with: "")
+        parts.append(userTurn)
+
+        // Add assistant prefix (template up to {{ASSISTANT}} placeholder)
+        if let range = template.range(of: "{{ASSISTANT}}") {
+            let prefix = String(template[template.startIndex..<range.lowerBound])
+            let cleaned = prefix.replacingOccurrences(of: "{{USER}}", with: "")
+                .replacingOccurrences(of: "{{SYSTEM}}", with: "")
+            if !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                parts.append(cleaned)
+            }
+        }
+
+        return parts.joined(separator: "\n")
+    }
+
     func buildMultiTurnPrompt(currentUserPrompt: String, ragPrefix: String? = nil) -> String {
+        let currentModel = chatModel(named: selectedModelName)
+
+        // Custom prompt template: user-typed format for imported models
+        if let template = currentModel?.promptTemplate, !template.isEmpty {
+            return buildCustomTemplatePrompt(template: template, currentUserPrompt: currentUserPrompt, ragPrefix: ragPrefix)
+        }
+
         let modelName = selectedModelName.lowercased()
         let modelSupportsThinking = chatModel(named: selectedModelName)?.supportsThinking == true
-        let isGemma  = modelName.contains("gemma")
-        let isGemma4 = isGemma && (modelName.contains("gemma 4") || modelName.contains("gemma-4")) && !modelName.contains("translate")
-        let isLlama  = modelName.contains("llama") || modelName.contains("mistral")
+        let isGemma      = modelName.contains("gemma")
+        let isGemma4     = isGemma && (modelName.contains("gemma 4") || modelName.contains("gemma-4")) && !modelName.contains("translate")
+        let isLlama      = modelName.contains("llama") || modelName.contains("mistral")
+        let isLlama3     = isLlama && (modelName.contains("llama-3") || modelName.contains("llama 3") || modelName.contains("llama-3."))
         let isHarmonyModel = modelName.contains("gpt-oss") || modelName.contains("gpt_oss")
+        let isMuseGlimmer = currentModel?.chatTemplateFamily == .museGlimmer
+        let isGranite42  = modelName.contains("granite-4.2") || modelName.contains("granite 4.2")
+        let isGranite    = modelName.contains("granite") && !isGranite42
+        let isPhi4       = modelName.contains("phi-4") || modelName.contains("phi 4") || modelName.contains("phi4")
+        let isChatML     = modelName.contains("lfm") || modelName.contains("liquid")
 
-        // 1. Identify history (exclude placeholder turns)
-        var history: [ChatMessage] = messages.count >= 2 ? Array(messages.dropLast(2)) : []
+        // 1. Identify history (exclude placeholder turns).
+        // Respect context-reset boundary: if the context ring was previously reset,
+        // only feed messages from the reset point onward so the model truly forgets
+        // pre-reset history (matching what the display ring already shows).
+        let resetStart = contextResetStartBySessionId[currentSessionId] ?? 0
+        let allHistory: [ChatMessage] = messages.count >= 2 ? Array(messages.dropLast(2)) : []
+        var history: [ChatMessage] = resetStart > 0 ? Array(allHistory.dropFirst(min(resetStart, allHistory.count))) : allHistory
 
         // 2. Context Window Management (Sliding Window)
         // Size history budget from the actual loaded context window so prompt + response fit.
@@ -1768,17 +2023,35 @@ class ChatViewModel: ObservableObject {
         // the start and end of long assistant replies (e.g. stories).
         for msg in history.reversed() {
             // For context budget, count only the answer portion (thinking is stripped)
-            let effectiveLen: Int
+            let rawContent: String
             if !msg.isFromUser && contentHasThinkingMarkers(msg.content) {
-                effectiveLen = getDisplayContentWithoutThinking(msg.content).count
+                rawContent = getDisplayContentWithoutThinking(msg.content)
             } else {
-                effectiveLen = msg.content.count
+                rawContent = msg.content
             }
-            if currentChars + effectiveLen < maxHistoryChars {
+            let effectiveLen = rawContent.count
+            let remaining = maxHistoryChars - currentChars
+
+            if effectiveLen <= remaining {
+                // Message fits entirely — include as-is.
                 truncatedHistory.insert(msg, at: 0)
                 currentChars += effectiveLen
+            } else if remaining > 300 {
+                // Message exceeds remaining budget but there is still meaningful space.
+                // Truncate the MIDDLE so we keep both the opening and closing context
+                // (e.g. a long story's intro + conclusion).  This prevents a single long
+                // assistant reply from silently wiping out all history on the next turn.
+                let half = remaining / 2
+                let startSlice = String(rawContent.prefix(half))
+                let endSlice   = String(rawContent.suffix(half))
+                var elided = msg
+                elided.content = startSlice + "\n…\n" + endSlice
+                truncatedHistory.insert(elided, at: 0)
+                currentChars = maxHistoryChars // budget exhausted
+                break
             } else {
-                break // Stop adding older messages
+                // Too little budget left for even a truncated version — stop here.
+                break
             }
         }
         history = truncatedHistory
@@ -1786,9 +2059,15 @@ class ChatViewModel: ObservableObject {
         // 3. Build the Raw Prompt String
         var parts: [String] = []
 
-        // Prepend the RAW prompt sentinel for the RunAnywhere SDK
+        // Preserve the raw prompt sentinel used by the direct llama.cpp prompt path.
         // This prevents the SDK from wrapping our already-formatted string.
         parts.append("__RAW_PROMPT__")
+
+        if isLlama3 {
+            parts.append("<|begin_of_text|>")
+        } else if isChatML {
+            parts.append("<|startoftext|>")
+        }
 
         if isHarmonyModel {
             var harmonyParts: [String] = []
@@ -1821,14 +2100,73 @@ class ChatViewModel: ObservableObject {
             return parts.joined()
         }
 
+        // Muse Glimmer uses Meta's Onyx/ATEM template. It is not ChatML and it
+        // does not understand the plain `User:` / `Assistant:` fallback. Keep
+        // this byte-for-byte compatible with the upstream tokenizer template's
+        // text-only conversation path.
+        if isMuseGlimmer {
+            let systemContent = ragPrefix?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let effectiveSystem = systemContent.isEmpty ? "You are a helpful AI assistant." : systemContent
+            let dateFormatter = DateFormatter()
+            dateFormatter.calendar = Calendar(identifier: .gregorian)
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let currentDate = dateFormatter.string(from: Date())
+            let validRecipients = enableThinking ? "\"self\", \"user\"" : "\"user\""
+            var museParts = [
+                "<|begin_of_text|>",
+                "<|start|>system<|message|>\(effectiveSystem)\nKnowledge cutoff: 2026-01-04.\nCurrent date: \(currentDate).\n\nReasoning strength: high.\n\n# Valid recipients: \(validRecipients).<|eot|>"
+            ]
+
+            for msg in history {
+                let rawContent = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                let content: String
+                if msg.isFromUser {
+                    content = rawContent
+                } else {
+                    let answer = getDisplayContentWithoutThinking(rawContent)
+                    content = answer.isEmpty ? rawContent : answer
+                }
+                guard !content.isEmpty else { continue }
+
+                if msg.isFromUser {
+                    museParts.append("<|start|>user<|message|>\(content)<|eot|>")
+                } else {
+                    museParts.append("<|start|>assistant to=user<|message|>\(content)<|eot|>")
+                }
+            }
+
+            museParts.append("<|start|>user<|message|>\(currentUserPrompt)<|eot|>")
+            museParts.append(enableThinking
+                ? "<|start|>assistant"
+                : "<|start|>assistant to=user<|message|>")
+            parts.append(contentsOf: museParts)
+
+            let finalPrompt = parts.joined()
+            #if DEBUG
+            print("📝 [PromptBuild] Muse Glimmer Onyx template, promptChars=\(finalPrompt.count)")
+            #endif
+            return finalPrompt
+        }
+
         // Optionally inject RAG context or System Message as an opening turn.
         if let rag = ragPrefix, !rag.isEmpty {
-            if isGemma4 {
+            if isPhi4 {
+                parts.append("<|system|>\n\(rag)<|end|>")
+            } else if isGemma4 {
                 parts.append("<|turn>system\n\(rag)<turn|>")
             } else if isGemma {
                 parts.append("<start_of_turn>user\n\(rag)<end_of_turn>\n<start_of_turn>model\nUnderstood.<end_of_turn>")
+            } else if isLlama3 {
+                parts.append("<|start_header_id|>system<|end_header_id|>\n\n\(rag)<|eot_id|>")
             } else if isLlama {
                 parts.append("[INST] \(rag) [/INST]\nUnderstood.")
+            } else if isGranite42 {
+                parts.append("<|im_start|>system\n\(rag)<|im_end|>")
+            } else if isGranite {
+                parts.append("<|start_of_role|>system<|end_of_role|>\(rag)<|end_of_text|>")
+            } else if isChatML {
+                parts.append("<|im_start|>system\n\(rag)<|im_end|>")
             } else {
                 parts.append("System: \(rag)")
             }
@@ -1848,18 +2186,34 @@ class ChatViewModel: ObservableObject {
             }
             guard !content.isEmpty else { continue }
 
-            if isGemma4 {
+            if isPhi4 {
+                let role = msg.isFromUser ? "user" : "assistant"
+                parts.append("<|\(role)|>\n\(content)<|end|>")
+            } else if isGemma4 {
                 let gemmaRole = msg.isFromUser ? "user" : "model"
                 parts.append("<|turn>\(gemmaRole)\n\(content)<turn|>")
             } else if isGemma {
                 let gemmaRole = msg.isFromUser ? "user" : "model"
                 parts.append("<start_of_turn>\(gemmaRole)\n\(content)<end_of_turn>")
+            } else if isLlama3 {
+                let role = msg.isFromUser ? "user" : "assistant"
+                parts.append("<|start_header_id|>\(role)<|end_header_id|>\n\n\(content)<|eot_id|>")
             } else if isLlama {
                 if msg.isFromUser {
                     parts.append("[INST] \(content) [/INST]")
                 } else {
                     parts.append(content)
                 }
+            } else if isGranite42 {
+                let role = msg.isFromUser ? "user" : "assistant"
+                let prefix = msg.isFromUser ? "" : "<think></think>"
+                parts.append("<|im_start|>\(role)\n\(prefix)\(content)<|im_end|>")
+            } else if isGranite {
+                let role = msg.isFromUser ? "user" : "assistant"
+                parts.append("<|start_of_role|>\(role)<|end_of_role|>\(content)<|end_of_text|>")
+            } else if isChatML {
+                let role = msg.isFromUser ? "user" : "assistant"
+                parts.append("<|im_start|>\(role)\n\(content)<|im_end|>")
             } else {
                 let prefix = msg.isFromUser ? "User" : "Assistant"
                 parts.append("\(prefix): \(content)")
@@ -1867,14 +2221,33 @@ class ChatViewModel: ObservableObject {
         }
 
         // 4. Append the active new user prompt
-        if isGemma4 {
+        if isPhi4 {
+            parts.append("<|user|>\n\(currentUserPrompt)<|end|>")
+            parts.append("<|assistant|>\n")
+        } else if isGemma4 {
             parts.append("<|turn>user\n\(currentUserPrompt)<turn|>")
             parts.append("<|turn>model\n")
         } else if isGemma {
             parts.append("<start_of_turn>user\n\(currentUserPrompt)<end_of_turn>")
             parts.append("<start_of_turn>model\n")
+        } else if isLlama3 {
+            parts.append("<|start_header_id|>user<|end_header_id|>\n\n\(currentUserPrompt)<|eot_id|>")
+            parts.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
         } else if isLlama {
             parts.append("[INST] \(currentUserPrompt) [/INST]")
+        } else if isGranite42 {
+            parts.append("<|im_start|>user\n\(currentUserPrompt)<|im_end|>")
+            if modelSupportsThinking && enableThinking {
+                parts.append("<|im_start|>assistant\n<think>\n")
+            } else {
+                parts.append("<|im_start|>assistant\n<think></think>")
+            }
+        } else if isGranite {
+            parts.append("<|start_of_role|>user<|end_of_role|>\(currentUserPrompt)<|end_of_text|>")
+            parts.append("<|start_of_role|>assistant<|end_of_role|>")
+        } else if isChatML {
+            parts.append("<|im_start|>user\n\(currentUserPrompt)<|im_end|>")
+            parts.append("<|im_start|>assistant\n")
         } else {
             parts.append("User: \(currentUserPrompt)")
             parts.append("Assistant:")
@@ -2144,10 +2517,14 @@ struct MessageBubble: View {
                         let answer = hasMarkers ? getDisplayContentWithoutThinking(message.content) : message.content
                         if !hasMarkers || !answer.isEmpty {
                             Spacer()
-                            // The backend already provides responseTokens (answer-only count)
-                            // via result.responseTokens in the final callback, so tokenCount
-                            // is already the answer token count — no need to subtract an estimate.
-                            Label(String(format: settings.localized("tokens_per_second_format"), tokenCount, tps), systemImage: "bolt.fill")
+                            let displayedTokenCount: Int = {
+                                if hasMarkers && !answer.isEmpty {
+                                    let answerTokens = Int(ceil(Double(answer.count) / 4.0))
+                                    return max(1, min(tokenCount, answerTokens))
+                                }
+                                return tokenCount
+                            }()
+                            Label(String(format: settings.localized("tokens_per_second_format"), displayedTokenCount, tps), systemImage: "bolt.fill")
                                 .font(.caption2)
                                 .foregroundColor(.white.opacity(0.63))
                         }
@@ -2415,7 +2792,7 @@ private struct MathView: UIViewRepresentable {
     }
 }
 
-private struct MarkdownTableView: View {
+struct MarkdownTableView: View {
     let rawTable: String
 
     var body: some View {
@@ -2467,7 +2844,7 @@ private struct MarkdownTableView: View {
     }
 }
 
-private struct MarkdownMessageText: View {
+struct MarkdownMessageText: View {
     let text: String
 
     var body: some View {
@@ -2747,10 +3124,12 @@ struct ChatDrawerPanel: View {
                             .fontWeight(.semibold)
                     }
                     if !vm.chatSessions.isEmpty {
-                        Button(role: .destructive) {
+                        Button {
                             showDeleteAllAlert = true
                         } label: {
-                            Label(settings.localized("drawer_clear_all_chats"), systemImage: "trash")
+                            Label(settings.localized("drawer_clear_all_chats"), systemImage: "trash.fill")
+                                .foregroundColor(ApolloPalette.destructive)
+                                .fontWeight(.semibold)
                         }
                     }
                 }
@@ -2799,10 +3178,11 @@ struct ChatDrawerPanel: View {
 
             }
             .scrollContentBackground(.hidden)
+            .apolloTopScrollEdgeFade()
             .background(ApolloLiquidBackground())
             .navigationTitle(settings.localized("drawer_title"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     // Back arrow to Home - same as Android drawer's ArrowBack
@@ -2838,12 +3218,10 @@ struct ChatScreen: View {
     @EnvironmentObject var settings: AppSettings
     @StateObject private var vm = ChatViewModel()
     @ObservedObject private var ttsManager = OnDeviceTtsManager.shared
-    @ObservedObject private var interstitialManager = InterstitialAdManager.shared
     var onNavigateToSettings: () -> Void
     var onNavigateToModels: () -> Void
     var onNavigateBack: () -> Void
 
-    @State private var showPremiumFromAd = false
     @State private var showDrawer = false
     @State private var showSettings = false
     @State private var copiedMessageId: UUID? = nil
@@ -2908,14 +3286,19 @@ struct ChatScreen: View {
                         .padding(.bottom, 12)
                     }
                     .safeAreaPadding(.bottom, 130)
+                    .apolloTopScrollEdgeFade()
                     .scrollDismissesKeyboard(.interactively)
                     .onTapGesture {
                         isComposerFocused = false
                     }
                     .onChange(of: userHasScrolledUp) { _, scrolledUp in
-                        if !scrolledUp, let last = vm.messages.last {
-                            withAnimation {
-                                proxy.scrollTo(last.id, anchor: .bottom)
+                        vm.viewIsScrolledUp = scrolledUp
+                        if !scrolledUp {
+                            vm.flushThrottledStreamUpdate()
+                            if let last = vm.messages.last {
+                                withAnimation {
+                                    proxy.scrollTo(last.id, anchor: .bottom)
+                                }
                             }
                         }
                     }
@@ -3205,15 +3588,9 @@ struct ChatScreen: View {
         .apolloScreenBackground()
         .onPreferenceChange(AtBottomPreferenceKey.self) { atBottom in
             isAtBottom = atBottom
-            if atBottom {
-                userHasScrolledUp = false
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            BannerAdContainer()
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -3235,7 +3612,9 @@ struct ChatScreen: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.white.opacity(0.78))
+                            .fixedSize()
                     }
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.55)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(vm.isBackendLoading ? Color.orange.opacity(0.26) : Color.white.opacity(0.12))
@@ -3254,20 +3633,9 @@ struct ChatScreen: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
              ChatSettingsSheet(vm: vm)
                 .environmentObject(settings)
-        }
-        // Show premium upsell after every interstitial ad
-        .sheet(isPresented: $showPremiumFromAd) {
-            PremiumScreen()
-                .environmentObject(settings)
-        }
-        .onChange(of: interstitialManager.showPremiumAfterAd) { _, triggered in
-            if triggered {
-                showPremiumFromAd = true
-                interstitialManager.showPremiumAfterAd = false
-            }
         }
         .fullScreenCover(isPresented: Binding(
             get: { previewImagePath != nil },
@@ -3281,7 +3649,7 @@ struct ChatScreen: View {
                 previewImagePath = nil
             }
         }
-        .sheet(isPresented: $showDrawer) {
+        .apolloSheet(isPresented: $showDrawer) {
             ChatDrawerPanel(
                 vm: vm,
                 onClose: { showDrawer = false },
@@ -3400,7 +3768,6 @@ struct ChatScreen: View {
             hasInitializedChatSession = true
             vm.unloadModel()
             Task {
-                _ = await RunAnywhere.discoverDownloadedModels()
                 await RagServiceManager.shared.initialize(modelId: AppSettings.shared.selectedEmbeddingModelId)
             }
         }
@@ -3548,11 +3915,22 @@ struct ChatScreen: View {
             },
             onRegenerateResponse: regenerateAction,
             onToggleTts: !msg.isFromUser && !msg.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? {
-                ttsManager.toggleSpeaking(
-                    msg.content,
-                    fallbackLanguage: settings.selectedLanguage,
-                    key: msg.id.uuidString
-                )
+                let isThinkingActive = modelSupportsThinking && vm.enableThinking && useStreamingThinkingHeuristic
+                let contentToSpeak: String
+                if contentHasThinkingMarkers(msg.content) {
+                    contentToSpeak = getDisplayContentWithoutThinking(msg.content)
+                } else if msg.isGenerating && isThinkingActive {
+                    contentToSpeak = ""
+                } else {
+                    contentToSpeak = msg.content
+                }
+                if !contentToSpeak.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ttsManager.toggleSpeaking(
+                        contentToSpeak,
+                        fallbackLanguage: settings.selectedLanguage,
+                        key: msg.id.uuidString
+                    )
+                }
             } : nil,
             isTtsSpeaking: ttsManager.isSpeaking(key: msg.id.uuidString)
         )
@@ -3594,7 +3972,7 @@ struct ChatScreen: View {
         var models = ModelData.allModels().filter { model in
             if model.isDependencyOnly { return false }
             if model.name.hasPrefix("Translate Gemma") { return false }
-            if model.category == .embedding || model.category == .imageGeneration || model.category == .videoGeneration || model.category == .imageUpscale { return false }
+            if !model.isLanguageModel { return false }
 
             guard ModelData.isModelFullyAvailableLocally(model) else { return false }
             return true

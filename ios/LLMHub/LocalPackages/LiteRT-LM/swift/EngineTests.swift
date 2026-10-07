@@ -26,6 +26,7 @@ func testDataPath(forResource resource: String) -> String {
 class EngineTests: XCTestCase {
 
   func testEngineConfig_IsCorrectlySet() async throws {
+    // swift-format-ignore
     let modelResource =
       "runtime/testdata/test_lm_new_metadata.task"
     let modelPath = testDataPath(forResource: modelResource)
@@ -42,6 +43,7 @@ class EngineTests: XCTestCase {
   }
 
   func testEngineConfigThrowsErrorWithInvalidMaxNumTokens() throws {
+    // swift-format-ignore
     let modelResource =
       "runtime/testdata/test_lm_new_metadata.task"
     let modelPath = testDataPath(forResource: modelResource)
@@ -54,6 +56,7 @@ class EngineTests: XCTestCase {
   }
 
   func testIsInitialized_IsFalseForNewEngine() async throws {
+    // swift-format-ignore
     let modelResource =
       "runtime/testdata/test_lm_new_metadata.task"
     let modelPath = testDataPath(forResource: modelResource)
@@ -66,6 +69,7 @@ class EngineTests: XCTestCase {
   }
 
   func testInitialize_SetsIsInitializedToTrue() async throws {
+    // swift-format-ignore
     let modelResource =
       "runtime/testdata/test_lm_new_metadata.task"
     let modelPath = testDataPath(forResource: modelResource)
@@ -78,6 +82,7 @@ class EngineTests: XCTestCase {
   }
 
   func testInitialize_ThrowsIfCalledTwice() async throws {
+    // swift-format-ignore
     let modelResource =
       "runtime/testdata/test_lm_new_metadata.task"
     let modelPath = testDataPath(forResource: modelResource)
@@ -123,6 +128,7 @@ class EngineTests: XCTestCase {
   }
 
   func testBenchmark_returnsBenchmarkInfo() async throws {
+    // swift-format-ignore
     let modelResource =
       "runtime/testdata/test_lm.litertlm"
     let modelPath = testDataPath(forResource: modelResource)
@@ -146,6 +152,7 @@ class EngineTests: XCTestCase {
     // when it goes out of scope. If deinit (which calls close()) has an issue,
     // this test will crash or fail.
     func scopeToTriggerDeinit() async throws {
+      // swift-format-ignore
       let modelResource =
         "runtime/testdata/test_lm_new_metadata.task"
       let modelPath = testDataPath(forResource: modelResource)
@@ -161,5 +168,25 @@ class EngineTests: XCTestCase {
 
     try await scopeToTriggerDeinit()
     // If we reached this point, deinit completed without crashing.
+  }
+
+  func testEngineTeardownAndHandleNilDoesNotCrash() async throws {
+    func scopeToTriggerEngineTeardown() async throws {
+      let modelResource =
+        "runtime/testdata/test_lm_new_metadata.task"
+      let modelPath = testDataPath(forResource: modelResource)
+      let engineConfig = try EngineConfig(
+        modelPath: modelPath, maxNumTokens: 16, cacheDir: NSTemporaryDirectory())
+      var engine: Engine? = Engine(engineConfig: engineConfig)
+
+      try await engine?.initialize()
+      let isInitialized = await engine?.isInitialized() == true
+      XCTAssertTrue(isInitialized)
+
+      // Releasing engine runs Engine.deinit where self.handle = nil right before calling litert_lm_engine_delete.
+      engine = nil
+    }
+
+    try await scopeToTriggerEngineTeardown()
   }
 }

@@ -43,34 +43,34 @@
 "about_llm_hub" = "LLM Hubについて";
 "about_description" = "LLM Hubは、大規模言語モデルの力をモバイルデバイスに直接もたらすオープンソースのAndroidアプリケーションです。Gemma、Llama、Phiなどの最先端モデルとのAI会話を体験してください - すべて最大限のプライバシーとオフラインアクセスのために、スマートフォン上でローカルに実行されます。";
 "key_features" = "主な機能";
-"feature_multiple_models" = "🤖 複数のLLMモデル：Gemma-3、Llama-3.2、Phi-4、Translate Gemma";
-"feature_on_device" = "📱 デバイス上処理：完全なプライバシー、インターネット不要";
-"feature_vision_support" = "🖼️ ビジョンサポート：画像を理解するマルチモーダルモデル";
-"feature_gpu_acceleration" = "⚡ GPU高速化：サポートされているデバイスでの最適化されたパフォーマンス";
-"feature_offline_usage" = "💾 オフライン使用：インターネット接続なしでチャット";
-"feature_privacy_first" = "🔒 プライバシー第一：会話がデバイスから出ることはありません";
-"feature_modern_ui" = "🎨 モダンUI：クリーンで直感的なMaterial Designインターフェース";
+"feature_multiple_models" = "複数のLLMモデル：Gemma-3、Llama-3.2、Phi-4、Translate Gemma";
+"feature_on_device" = "デバイス上処理：完全なプライバシー、インターネット不要";
+"feature_vision_support" = "ビジョンサポート：画像を理解するマルチモーダルモデル";
+"feature_gpu_acceleration" = "GPU高速化：サポートされているデバイスでの最適化されたパフォーマンス";
+"feature_offline_usage" = "オフライン使用：インターネット接続なしでチャット";
+"feature_privacy_first" = "プライバシー第一：会話がデバイスから出ることはありません";
+"feature_modern_ui" = "モダンUI：クリーンで直感的なMaterial Designインターフェース";
 "developer_info" = "開発者情報";
 "about_developer_info" = "このプロジェクトは、AI技術をすべての人にとってよりアクセスしやすくすることに情熱を注ぐ愛好家によって開発されています。フィードバックと貢献はいつでも歓迎します！";
 "tech_stack" = "技術スタック";
 "about_tech_stack" = "LLM Hubは、最新のAndroid開発技術を使用して構築されています：Kotlin、Jetpack Compose、Material Design 3、そして効率的なデバイス上推論のためのllama.cppライブラリ。";
-"tech_kotlin_compose" = "🏗️ KotlinとJetpack Composeで構築";
-"tech_mediapipe_litert" = "🧠 MediaPipeとLiteRTによって駆動";
-"tech_quantization" = "🚀 INT4/INT8量子化で最適化";
-"tech_gpu_acceleration" = "⚡ LiteRT XNNPACKによるGPU高速化";
-"tech_models_source" = "🔗 HuggingFaceとGoogleからのモデル";
+"tech_kotlin_compose" = "KotlinとJetpack Composeで構築";
+"tech_mediapipe_litert" = "MediaPipeとLiteRTによって駆動";
+"tech_quantization" = "INT4/INT8量子化で最適化";
+"tech_gpu_acceleration" = "LiteRT XNNPACKによるGPU高速化";
+"tech_models_source" = "HuggingFaceとGoogleからのモデル";
 "contact_support" = "連絡先とサポート";
 "contact_email" = "連絡先メール：";
 "source_code" = "ソースコード：";
 "github_repository" = "GitHubリポジトリ";
 "acknowledgments" = "謝辞";
 "acknowledgments_text" = "このアプリケーションを支える素晴らしいLLMモデルを提供してくれたGoogle、Meta、Microsoft、IBM、およびHuggingFaceコミュニティに特別な感謝を。このプロジェクトは、Android開発コミュニティとオープンソースエコシステムの素晴らしい仕事にも依存しています。";
-"sd_models_credit" = "画像生成モデルは、Qualcomm QNN（NPU）とAlibaba MNN（CPU）バックエンドを使用したxororzのStable Diffusion実装により提供されています。";
+"sd_models_credit" = "画像生成モデルは、Qualcomm QNN（NPU）とCPUバックエンドを使用したxororzのStable Diffusion実装により提供されています。";
 "nexa_sdk_credit" = "GGUFモデルの推論はNexa SDKによって提供されています。";
 "ai_thinking" = "AIが考え中...";
 "thinking_label" = "思考";
 "thinking_tokens" = "思考（%1$d トークン）";
-"version_number" = "バージョン 3.8.3";
+"version_number" = "バージョン 4.4.2";
 "app_version" = "アプリバージョン";
 "terms_of_service" = "利用規約";
 "tos_last_updated" = "最終更新：2025年7月16日";
@@ -267,6 +267,9 @@
 "remaining" = "残り";
 "auto_readout" = "自動読み上げ";
 "auto_readout_description" = "メッセージ送信後、AIの応答を自動的に音声で読み上げます";
+"text_to_speech_voices" = "テキスト読み上げ音声";
+"text_to_speech_voices_description" = "読み上げコンテンツ用のiOS音声を選択します";
+"tts_voices_nav_hint" = "設定 → アクセシビリティ → 読み上げと発話 → 声 に移動してください。";
 "image_copied_clipboard" = "チャットから画像をコピーしました";
 "image_copied_to_clipboard" = "画像がクリップボードにコピーされました";
 "failed_to_copy_image" = "画像のコピーに失敗しました";
@@ -355,6 +358,7 @@
 "supports_vision" = "ビジョンをサポート";
 "supports_audio" = "音声をサポート";
 "supports_gpu" = "GPUをサポート";
+"supports_mtp" = "MTPをサポート";
 "model_format" = "モデルフォーマット";
 "context_window_size" = "コンテキストウィンドウサイズ";
 "import_model" = "モデルをインポート";
@@ -411,7 +415,8 @@
 "translator_auto_detect" = "自動検出";
 "translator_translate" = "翻訳";
 "translator_result" = "翻訳";
-"translator_requires_gemma3n" = "この機能にはTranslate GemmaまたはGemma 4モデルが必要です。モデル画面から1つダウンロードしてください。";
+"translator_requires_gemma3n" = "翻訳には任意のLLMモデルを使用できます。最高の多言語パフォーマンスを得るにはGemma 4モデルをお勧めします。";
+"translator_load_model_desc" = "翻訳を開始するには任意のLLMモデルをダウンロードしてください。最高の多言語パフォーマンスを得るにはGemma 4モデルをお勧めします。";
 "transcriber_title" = "オフライン文字起こし";
 "transcriber_record" = "音声を録音";
 "transcriber_upload" = "音声をアップロード";
@@ -489,6 +494,7 @@
 "lang_bulgarian" = "ブルガリア語";
 "lang_burmese" = "ビルマ語";
 "lang_catalan" = "カタルーニャ語";
+"lang_central_kurdish" = "中央クルド語（ソラニー語）";
 "lang_chinese" = "中国語（簡体字）";
 "lang_chinese_traditional" = "中国語（繁体字）";
 "lang_croatian" = "クロアチア語";
@@ -703,7 +709,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub プレミアム ライフタイム";
 "premium_subtitle" = "フル機能を解除する";
-"premium_feature_no_ads" = "広告なし、永遠に";
 "premium_feature_vibe_coder" = "VibeCoder – AIコードジェネレーター";
 "premium_feature_image_gen" = "画像ジェネレーター – デバイス上のAIアート";
 "premium_feature_tts" = "テキスト読み上げ自動再生";
@@ -725,8 +730,6 @@
 "premium_restore_success" = "購入が正常に復元されました！";
 "premium_restore_nothing" = "以前の購入履歴が見つかりませんでした。";
 "premium_go_premium" = "Premiumへ";
-"privacy_ads_title" = "プライバシーと広告";
-"privacy_ads_subtitle" = "広告のパーソナライズと同意の選択を管理する";
 "export" = "エクスポート";
 "home_section_tools" = "ツール";
 "home_section_utilities" = "ユーティリティ";
@@ -807,5 +810,117 @@
 "whisper_live_transcription" = "Whisperリアルタイム文字起こし";
 "whisper_transcribing" = "Whisperで文字起こし中…";
 
+"prompt_template_optional" = "プロンプトテンプレート（任意）";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "{{SYSTEM}}、{{USER}}、{{ASSISTANT}} をプレースホルダーとして使用";
+
 "on_device_ai_engine" = "オンデバイスAIエンジン";
 "secure_private" = "安全・プライベート";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "エージェント";
+"feature_agent_desc" = "ツールとアクションを持つAIアシスタント";
+"premium_feature_agent" = "エージェント – ツールとデバイスアクション付きAI";
+"agent_title" = "エージェント";
+"agent_subtitle" = "何でも聞いてください — 検索、地図、カレンダーなど対応できます";
+"agent_input_placeholder" = "エージェントに質問…";
+"agent_voice_mode_system" = "システム";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "実行中: %@";
+"agent_tool_success" = "完了";
+"agent_tool_failed" = "失敗";
+"agent_tool_confirm_title" = "アクションを許可しますか?";
+"agent_tool_confirm_body" = "エージェントが次のことをしようとしています: %@";
+"agent_tool_approve" = "許可";
+"agent_tool_deny" = "拒否";
+"agent_no_model" = "エージェントを使用するにはモデルをダウンロードしてください";
+"agent_map_expand" = "フルマップを見る";
+"agent_settings_voice_mode" = "音声入力モード";
+"agent_settings_tools" = "有効なツール";
+"agent_shortcut_confirm" = "ショートカットを実行: %@";
+"agent_calendar_confirm" = "イベントを作成: %@";
+
+"agent_welcome_message" = "こんにちは！私はあなたのAIエージェントです。Web検索、マップ表示、カレンダーの予定管理、天気予報の確認、アラーム設定、メッセージ送信、ハッシュ計算ができます。本日はどのようなご用件でしょうか？";
+"agent_no_model_android" = "エージェントを使用するには、まずGemma 4 E2/4Bモデルをダウンロードしてください";
+"agent_no_model_ios" = "エージェントを使用するには、まずモデルをダウンロードしてください";
+
+"open_maps" = "マップを開く";
+"agent_processing_tool" = "エージェントがツールを処理中...";
+
+"premium_feature_vibevoice" = "VibeVoice – 音声・スピーチAI";
+"premium_feature_vibecoder" = "VibeCode – AIコードビルダー";
+"premium_feature_image_generator" = "画像生成 – デバイス上のAIアート";
+"premium_feature_video_generator" = "動画生成 – AI動画作成";
+"search_huggingface" = "Hugging Face を検索";
+"search_huggingface_placeholder" = "GGUF または LiteRT-LM モデルを検索";
+"huggingface_results" = "Hugging Face の結果";
+"download_vision_projector" = "ビジョンプロジェクターをダウンロード";
+"huggingface_search_failed" = "Hugging Face の検索に失敗しました";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "音楽ジェネレーター";
+"feature_music_generator_desc" = "オンデバイスで音楽や効果音を生成";
+"music_generation_models" = "音楽生成モデル";
+"music_generation_models_description" = "音楽トラックや効果音を生成するためのオンデバイスAIモデル。";
+"music_prompt_label" = "音楽の説明・プロンプト";
+"prompt_hint_music" = "生成したい音楽や効果音の説明を入力してください...";
+"music_style_presets" = "スタイルプリセット";
+"music_tier_select" = "ジェネレーターティア";
+"music_duration_label" = "再生時間";
+"generate_music" = "音楽を生成";
+"generating_music" = "音楽を生成中...";
+"music_prompt_empty_warning" = "生成したい音楽の説明を入力してください。";
+"music_generated_success" = "音楽が正常に生成されました！";
+"music_saved_toast" = "ライブラリに保存されました！";
+
+"music_generator_download_model" = "最初にモデルをダウンロード";
+"music_generator_download_model_desc" = "モデル画面から音楽生成モデルをダウンロードして、音楽の生成を開始してください。";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "MCP設定";
+"agent_mcp_title" = "MCPツール";
+"agent_mcp_description" = "MCPサーバーに接続し、エージェントがそのツールを使用できるようにします。";
+"agent_mcp_transport" = "トランスポート";
+"agent_mcp_termux_stdio" = "Termux stdio";
+"agent_mcp_remote_http" = "リモートHTTP";
+"agent_mcp_command" = "MCPサーバーコマンド";
+"agent_mcp_termux_help" = "Termux stdio経由でMCPサーバーを実行します。必要なパッケージを先にインストールしてください。";
+"agent_mcp_server_url" = "サーバーURL";
+"agent_mcp_bearer_token" = "Bearerトークン（任意）";
+"agent_mcp_approval_notice" = "すべてのMCPツール呼び出しは、実行前に承認が必要です。";
+"agent_mcp_connecting" = "接続中…";
+"agent_mcp_connected_tools" = "%d個のツールに接続済み";
+"agent_mcp_error" = "MCPエラー: %@";
+"agent_mcp_missing_required_arguments" = "必須のMCP引数が不足しています: %@";
+"agent_mcp_connect" = "接続";
+"agent_mcp_disconnect" = "切断";
+"agent_mcp_tool_request" = "MCPツール: %@";
+"agent_mcp_allow" = "許可";
+"agent_mcp_deny" = "拒否";
+"agent_mcp_approval_required" = "承認が必要";
+"agent_mcp_denied" = "ユーザーが拒否しました";
+"agent_mcp_status" = "状態";
+"agent_termux_tool_title" = "Termuxシェルコマンド";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "Hugging Face トークン";
+"hf_token_subtitle" = "モデルダウンロード用の個人用アクセストークン";
+"hf_token_dialog_title" = "Hugging Face アクセストークン";
+"hf_token_explanation" = "デフォルトのトークンで失敗した場合や利用制限に達した際、またライセンス同意が必要な保護されたモデルをダウンロードするには、huggingface.co/settings/tokens で取得した個人用リードトークンを入力してください。";
+"hf_token_placeholder" = "個人用トークンを入力 (hf_...)";
+"hf_token_using_default" = "デフォルトトークンを使用中";
+"hf_token_custom_active" = "カスタムトークン有効";
+"hf_token_clear" = "デフォルトに戻す";
+
+/* Edit Prompt Template */
+"edit" = "編集";
+"prompt_template" = "プロンプトテンプレート";
+"edit_prompt_template" = "プロンプトテンプレートを編集";
+"prompt_template_none" = "なし（デフォルト）";

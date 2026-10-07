@@ -9,6 +9,7 @@ import com.llmhub.llmhub.inference.InferenceService
 import com.llmhub.llmhub.inference.UnifiedInferenceService
 import com.llmhub.llmhub.repository.ChatRepository
 import com.llmhub.llmhub.data.LLMModel
+import com.llmhub.llmhub.data.effectiveContextWindow
 import com.llmhub.llmhub.data.ModelAvailabilityProvider
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,13 @@ class CreatorViewModel(
 ) : ViewModel() {
 
     private var generationJob: Job? = null
+    private var preserveLoadedModelForChat = false
+
+    fun retainLoadedModelForChat() {
+        preserveLoadedModelForChat = inferenceService.getCurrentlyLoadedModel() != null
+    }
+
+    fun isRetainingModelForChat(): Boolean = preserveLoadedModelForChat
 
     fun renameCreator(creatorId: String, newName: String) {
         viewModelScope.launch {
@@ -108,8 +116,8 @@ class CreatorViewModel(
                 val model = _availableModels.value.find { it.name == savedModelName }
                 if (model != null) {
                     _selectedModel.value = model
-                    val savedTokens = prefs.getInt("max_tokens_${model.name}", minOf(4096, model.contextWindowSize.coerceAtLeast(1)))
-                    _selectedMaxTokens.value = savedTokens.coerceIn(1, model.contextWindowSize.coerceAtLeast(1))
+                    val savedTokens = prefs.getInt("max_tokens_${model.name}", minOf(4096, model.effectiveContextWindow(context)))
+                    _selectedMaxTokens.value = savedTokens.coerceIn(1, model.effectiveContextWindow(context))
                     if (!model.supportsGpu && _selectedBackend.value == LlmInference.Backend.GPU) {
                         _selectedBackend.value = LlmInference.Backend.CPU
                     }
@@ -135,18 +143,21 @@ class CreatorViewModel(
     private fun applyGenerationParametersToService() {
         val model = _selectedModel.value
         val effectiveMaxTokens = if (model != null) {
-            _selectedMaxTokens.value.coerceIn(1, model.contextWindowSize.coerceAtLeast(1))
+            _selectedMaxTokens.value.coerceIn(1, model.effectiveContextWindow(context))
         } else {
             _selectedMaxTokens.value
         }
 
+        val isMuseGlimmer = model?.name?.contains("Muse Glimmer", ignoreCase = true) == true || model?.name?.contains("muse-glimmer", ignoreCase = true) == true
+        val isGranite42 = model?.name?.contains("granite-4.2", ignoreCase = true) == true || model?.name?.contains("granite 4.2", ignoreCase = true) == true
+        val useThinking = if (model?.name?.contains("Gemma-4", ignoreCase = true) == true || isMuseGlimmer || isGranite42) false else _enableThinking.value
         inferenceService.setGenerationParameters(
             maxTokens = effectiveMaxTokens,
             topK = null,
             topP = null,
             temperature = null,
             nGpuLayers = _selectedNGpuLayers.value,
-            enableThinking = if (model?.name?.contains("Gemma-4", ignoreCase = true) == true) false else _enableThinking.value,
+            enableThinking = useThinking,
             contextWindow = effectiveMaxTokens
         )
     }
@@ -161,8 +172,8 @@ class CreatorViewModel(
             if (_selectedModel.value == null && !_isModelLoaded.value) {
                 available.firstOrNull()?.let {
                     _selectedModel.value = it
-                    val savedTokens = prefs.getInt("max_tokens_${it.name}", minOf(4096, it.contextWindowSize.coerceAtLeast(1)))
-                    _selectedMaxTokens.value = savedTokens.coerceIn(1, it.contextWindowSize.coerceAtLeast(1))
+                    val savedTokens = prefs.getInt("max_tokens_${it.name}", minOf(4096, it.effectiveContextWindow(context)))
+                    _selectedMaxTokens.value = savedTokens.coerceIn(1, it.effectiveContextWindow(context))
                     _selectedBackend.value = if (it.supportsGpu) {
                         _selectedBackend.value ?: LlmInference.Backend.GPU
                     } else {
@@ -180,12 +191,15 @@ class CreatorViewModel(
         
         _selectedModel.value = model
         _isModelLoaded.value = false
-        val savedTokens = prefs.getInt("max_tokens_${model.name}", minOf(4096, model.contextWindowSize.coerceAtLeast(1)))
-        _selectedMaxTokens.value = savedTokens.coerceIn(1, model.contextWindowSize.coerceAtLeast(1))
+        val savedTokens = prefs.getInt("max_tokens_${model.name}", minOf(4096, model.effectiveContextWindow(context)))
+        _selectedMaxTokens.value = savedTokens.coerceIn(1, model.effectiveContextWindow(context))
 
         val isGemma4_12B = model.modelFormat == "litertlm" && (model.name.contains("Gemma-4 12B", ignoreCase = true) || model.name.contains("Gemma 4 12B", ignoreCase = true))
         if (isGemma4_12B) {
             _selectedBackend.value = LlmInference.Backend.GPU
+            _selectedNpuDeviceId.value = null
+        } else if (model.modelFormat == "gguf") {
+            _selectedBackend.value = LlmInference.Backend.CPU
             _selectedNpuDeviceId.value = null
         } else {
             _selectedBackend.value = if (model.supportsGpu) {
@@ -199,7 +213,7 @@ class CreatorViewModel(
     }
 
     fun setMaxTokens(maxTokens: Int) {
-        val cap = _selectedModel.value?.contextWindowSize?.coerceAtLeast(1) ?: 4096
+        val cap = _selectedModel.value?.effectiveContextWindow(context) ?: 4096
         _selectedMaxTokens.value = maxTokens.coerceIn(1, cap)
         saveSettings()
         applyGenerationParametersToService()
@@ -421,6 +435,7 @@ class CreatorViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        if (preserveLoadedModelForChat) return
         viewModelScope.launch {
             try { inferenceService.unloadModel() } catch (_: Exception) {}
         }

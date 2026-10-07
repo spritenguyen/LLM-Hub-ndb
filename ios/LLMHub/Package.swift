@@ -6,7 +6,7 @@ let package = Package(
     name: "LLMHub",
     defaultLocalization: "en",
     platforms: [
-        .iOS(.v17),
+        .iOS("17.5"),
         .macOS(.v14),
     ],
     products: [
@@ -16,35 +16,23 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(path: "../runanywhere-sdks-latest"),
-        .package(url: "https://github.com/apple/ml-stable-diffusion", from: "1.1.1"),
+        .package(path: "LocalPackages/magenta-runtime"),
         .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.20"),
         .package(path: "LocalPackages/media-generation-kit"),
-        .package(
-            url: "https://github.com/googleads/swift-package-manager-google-mobile-ads",
-            from: "11.0.0"
-        ),
-        .package(
-            url: "https://github.com/googleads/swift-package-manager-google-user-messaging-platform",
-            from: "2.0.0"
-        ),
-        .package(url: "https://github.com/google-ai-edge/LiteRT-LM", exact: "0.14.0"),
-        .package(url: "https://github.com/ggerganov/whisper.spm", from: "1.6.2"),
+        .package(path: "LocalPackages/LiteRT-LM"),
+        .package(path: "LocalPackages/llama-b11200"),
+        .package(path: "LocalPackages/whisper-wrapper"),
     ],
     targets: [
         .target(
             name: "LLMHub",
             dependencies: [
-                .product(name: "RunAnywhere", package: "runanywhere-sdks-latest"),
-                .product(name: "RunAnywhereLlamaCPP", package: "runanywhere-sdks-latest"),
-                .product(name: "RunAnywhereONNX", package: "runanywhere-sdks-latest"),
-                .product(name: "StableDiffusion", package: "ml-stable-diffusion"),
+                .product(name: "LlamaCppBinary", package: "llama-b11200"),
+                .product(name: "MagentaRuntime", package: "magenta-runtime"),
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-                .product(name: "GoogleMobileAds", package: "swift-package-manager-google-mobile-ads"),
-                .product(name: "GoogleUserMessagingPlatform", package: "swift-package-manager-google-user-messaging-platform"),
                 .product(name: "LiteRTLM", package: "LiteRT-LM"),
                 .product(name: "MediaGenerationKit", package: "media-generation-kit"),
-                .product(name: "whisper", package: "whisper.spm"),
+                .product(name: "WhisperWrapper", package: "whisper-wrapper"),
             ],
             exclude: [
                 "check_strings.py"
@@ -53,21 +41,26 @@ let package = Package(
                 .process("Icon.png"),
                 .process("en.lproj"),
                 .process("ar.lproj"),
+                .process("da.lproj"),
                 .process("de.lproj"),
                 .process("es.lproj"),
                 .process("fa.lproj"),
                 .process("fr.lproj"),
                 .process("he.lproj"),
+                .process("hi.lproj"),
                 .process("id.lproj"),
                 .process("it.lproj"),
                 .process("ja.lproj"),
                 .process("ko.lproj"),
+                .process("nl.lproj"),
                 .process("pl.lproj"),
                 .process("pt.lproj"),
                 .process("ru.lproj"),
+                .process("th.lproj"),
                 .process("tr.lproj"),
                 .process("uk.lproj"),
-                .process("zh.lproj")
+                .process("vi.lproj"),
+                .process("zh-TW.lproj")
             ],
             linkerSettings: [
                 .linkedFramework("Accelerate")

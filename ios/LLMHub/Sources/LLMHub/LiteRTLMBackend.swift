@@ -34,6 +34,7 @@ final class LiteRTLMBackend {
 
     private var engine: Engine?
     private var loadedModelPath: String?
+    private var isGemma4_12B = false
     /// The single active conversation. LiteRT-LM only allows one at a time.
     private var currentConversation: Conversation?
     /// Prevents re-entrancy bugs where a new session is created before the old one is destroyed.
@@ -45,8 +46,16 @@ final class LiteRTLMBackend {
 
     // MARK: - Model Lifecycle
 
-    /// Load a .litertlm model file from disk, initialise GPU engine with MTP.
-    func loadModel(at path: String, supportsVision: Bool, supportsAudio: Bool, maxTokens: Int?) async throws {
+    /// Load a .litertlm model file from disk.
+    func loadModel(
+        at path: String,
+        modelName: String? = nil,
+        supportsVision: Bool,
+        supportsAudio: Bool,
+        supportsGpu: Bool = true,
+        supportsMtp: Bool = true,
+        maxTokens: Int?
+    ) async throws {
         guard FileManager.default.fileExists(atPath: path) else {
             throw LiteRTLMError.modelFileNotFound(path)
         }
@@ -54,18 +63,22 @@ final class LiteRTLMBackend {
         // Unload any existing engine first
         await unload()
 
-        print("ℹ️ [LiteRTLMBackend] loadModel path=\(path) vision=\(supportsVision) audio=\(supportsAudio) maxTokens=\(String(describing: maxTokens))")
+        let identifier = (modelName ?? path).lowercased()
+        self.isGemma4_12B = identifier.contains("12b") || identifier.contains("gemma-4-12b") || identifier.contains("gemma4_12b")
 
-        let isGemma4_12B = path.lowercased().hasSuffix(".litertlm") && (path.lowercased().contains("gemma-4-12b") || path.lowercased().contains("gemma4_12b"))
         ExperimentalFlags.optIntoExperimentalAPIs()
-        ExperimentalFlags.enableSpeculativeDecoding = !isGemma4_12B
+        ExperimentalFlags.enableSpeculativeDecoding = supportsMtp
         ExperimentalFlags.enableBenchmark = true
+
+        let caps = Capabilities(modelPath: path)
+        let fileHasMtp = caps?.hasSpeculativeDecodingSupport() ?? false
+        print("ℹ️ [LiteRTLMBackend] loadModel path=\(path) vision=\(supportsVision) audio=\(supportsAudio) maxTokens=\(String(describing: maxTokens)) supportsMtp=\(supportsMtp) fileHasMtp=\(fileHasMtp) is12B=\(isGemma4_12B)")
 
         let config = try EngineConfig(
             modelPath: path,
-            backend: .gpu,
-            visionBackend: (supportsVision && !isGemma4_12B) ? .cpu() : nil,
-            audioBackend: (supportsAudio && !isGemma4_12B) ? .cpu() : nil,
+            backend: supportsGpu ? .gpu : .cpu(),
+            visionBackend: supportsVision ? .cpu() : nil,
+            audioBackend: supportsAudio ? .cpu() : nil,
             maxNumTokens: maxTokens,
             cacheDir: liteRTCacheDir()
         )
@@ -86,12 +99,13 @@ final class LiteRTLMBackend {
         if let conv = currentConversation {
             currentConversation = nil
             let task = Task.detached(priority: .userInitiated) {
-                conv.invalidate()
+                _ = conv
             }
             _ = await task.result
         }
         engine = nil
         loadedModelPath = nil
+        isGemma4_12B = false
         print("ℹ️ [LiteRTLMBackend] unloaded")
     }
 
@@ -136,17 +150,22 @@ final class LiteRTLMBackend {
             temperature: temperature
         )
 
+        // For Gemma 4 12B, use native ThinkingConfig.
+        // For E2B / E4B (and other models), use prompt injection (<|think|>) so MTP acceleration works directly on the main token stream.
+        let useNativeThinking = useThinking && isGemma4_12B
+        let usePromptInjectThinking = useThinking && !isGemma4_12B
+
         // Determine the final system prompt based on agent tools and thinking toggles
         let finalSystemPrompt: String?
         if enableAgentTools {
             let basePrompt = (systemPrompt != nil && !systemPrompt!.isEmpty) ? systemPrompt! : ChatAgentSkillsTools.AGENT_SYSTEM_PROMPT
-            if useThinking {
+            if usePromptInjectThinking {
                 finalSystemPrompt = "<|think|>\n\(basePrompt)"
             } else {
                 finalSystemPrompt = basePrompt
             }
         } else {
-            if useThinking {
+            if usePromptInjectThinking {
                 if let systemPrompt, !systemPrompt.isEmpty {
                     finalSystemPrompt = "<|think|>\n\(systemPrompt)"
                 } else {
@@ -163,28 +182,32 @@ final class LiteRTLMBackend {
             activeInvalidationTask = nil
         }
 
+        let thinkingConfig = useNativeThinking ? ThinkingConfig(enableThinking: true) : nil
+
         let conversation: Conversation
         if enableAgentTools {
             ExperimentalFlags.enableConversationConstrainedDecoding = true
             let config = ConversationConfig(
                 systemMessage: finalSystemPrompt.map { Message($0) },
                 tools: ChatAgentSkillsTools.allTools(),
-                samplerConfig: samplerConfig
+                samplerConfig: samplerConfig,
+                thinkingConfig: thinkingConfig
             )
             conversation = try await engine.createConversation(with: config)
             ExperimentalFlags.enableConversationConstrainedDecoding = false
         } else {
             let config = ConversationConfig(
                 systemMessage: finalSystemPrompt.map { Message($0) },
-                samplerConfig: samplerConfig
+                samplerConfig: samplerConfig,
+                thinkingConfig: thinkingConfig
             )
             conversation = try await engine.createConversation(with: config)
         }
         currentConversation = conversation
 
         // Always release the conversation when generation ends (success, error, or cancellation).
-        // Call invalidate() to synchronously free the C session — do NOT just nil the Swift ref,
-        // because this defer runs while the local `conversation` var is still on the stack.
+        // Setting `currentConversation` to nil and capturing the conversation in a background
+        // task allows the C session to be freed asynchronously on a background thread.
         // Also open any URL deferred by tools (Maps/Email/SMS) — they must NOT open mid-stream
         // because that sends the app to background and kills Metal GPU access.
         defer {
@@ -192,7 +215,7 @@ final class LiteRTLMBackend {
             self.currentConversation = nil
             if let conv = conv {
                 self.activeInvalidationTask = Task.detached(priority: .userInitiated) {
-                    conv.invalidate()
+                    _ = conv
                 }
             }
             print("ℹ️ [LiteRTLMBackend] conversation invalidation dispatched to background")
@@ -304,6 +327,8 @@ final class LiteRTLMBackend {
         cleaned = cleaned
             .replacingOccurrences(of: "<|start_header_id|>", with: "")
             .replacingOccurrences(of: "<|end_header_id|>", with: "")
+            .replacingOccurrences(of: "<channel|>", with: "")
+            .replacingOccurrences(of: "<|channel|>", with: "")
         return cleaned
     }
 

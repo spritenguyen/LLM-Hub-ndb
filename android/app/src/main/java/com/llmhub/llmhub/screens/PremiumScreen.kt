@@ -185,11 +185,6 @@ fun PremiumScreen(
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             PremiumFeatureRow(
-                                icon = Icons.Default.Block,
-                                tint = Color(0xFFFF7043),
-                                text = stringResource(R.string.premium_feature_no_ads)
-                            )
-                            PremiumFeatureRow(
                                 icon = Icons.Default.Code,
                                 tint = Color(0xFF7C4DFF),
                                 text = stringResource(R.string.premium_feature_vibe_coder)
@@ -198,6 +193,16 @@ fun PremiumScreen(
                                 icon = Icons.Default.Palette,
                                 tint = Color(0xFF2196F3),
                                 text = stringResource(R.string.premium_feature_image_gen)
+                            )
+                            PremiumFeatureRow(
+                                icon = Icons.Default.Face,
+                                tint = Color(0xFFE91E63),
+                                text = stringResource(R.string.premium_feature_creaitors)
+                            )
+                            PremiumFeatureRow(
+                                icon = Icons.Default.GraphicEq,
+                                tint = Color(0xFFFF5722),
+                                text = stringResource(R.string.premium_feature_vibevoice)
                             )
                             PremiumFeatureRow(
                                 icon = Icons.Default.VolumeUp,
@@ -220,11 +225,22 @@ fun PremiumScreen(
                                 text = stringResource(R.string.premium_feature_memory)
                             )
                             PremiumFeatureRow(
+                                icon = Icons.Default.SmartToy,
+                                tint = Color(0xFFA78BFA),
+                                text = stringResource(R.string.premium_feature_agent)
+                            )
+                            PremiumFeatureRow(
+                                icon = Icons.Default.MusicNote,
+                                tint = Color(0xFFFF9A9E),
+                                text = "${stringResource(R.string.feature_music_generator)} – ${stringResource(R.string.feature_music_generator_desc)}"
+                            )
+                            PremiumFeatureRow(
                                 icon = Icons.Default.AutoAwesome,
                                 tint = Color(0xFF00BCD4),
                                 text = stringResource(R.string.premium_feature_future),
                                 isLast = true
                             )
+
                         }
                     }
 

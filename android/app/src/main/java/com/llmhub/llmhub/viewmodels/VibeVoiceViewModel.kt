@@ -161,9 +161,9 @@ class VibeVoiceViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             val currentModel = _selectedModel.value
-            if (currentModel?.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-                _selectedBackend.value = LlmInference.Backend.GPU
-                _selectedNpuDeviceId.value = "dev0"
+            if (currentModel?.modelFormat == "gguf" && !prefs.contains("selected_backend")) {
+                _selectedBackend.value = LlmInference.Backend.CPU
+                _selectedNpuDeviceId.value = null
             }
 
             val savedVoiceName = prefs.getString("selected_voice_model_name", null)
@@ -217,9 +217,9 @@ class VibeVoiceViewModel(application: Application) : AndroidViewModel(applicatio
         if (_isModelLoaded.value) unloadModel()
         _selectedModel.value = model
 
-        if (model.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-            _selectedBackend.value = LlmInference.Backend.GPU
-            _selectedNpuDeviceId.value = "dev0"
+        if (model.modelFormat == "gguf") {
+            _selectedBackend.value = LlmInference.Backend.CPU
+            _selectedNpuDeviceId.value = null
         }
 
         if (!model.hasNativeVoiceSupport() && _selectedVoiceModel.value == null) {
@@ -280,10 +280,12 @@ class VibeVoiceViewModel(application: Application) : AndroidViewModel(applicatio
                 val voiceModel = _selectedVoiceModel.value
                 val isUsingAsr = voiceModel != null
                 val disableAudio = isUsingAsr
-                
                 (inferenceService as? UnifiedInferenceService)?.setAgentToolsEnabled(false)
                 val vibeVoiceCtx = minOf(model.contextWindowSize, 4096)
-                inferenceService.setGenerationParameters(null, null, null, null, enableThinking = if (model.name.contains("Gemma-4", ignoreCase = true)) false else null, contextWindow = vibeVoiceCtx)
+                val isMuseGlimmer = model.name.contains("Muse Glimmer", ignoreCase = true) || model.name.contains("muse-glimmer", ignoreCase = true)
+                val isGranite42 = model.name.contains("granite-4.2", ignoreCase = true) || model.name.contains("granite 4.2", ignoreCase = true)
+                val useThinking = if (model.name.contains("Gemma-4", ignoreCase = true) || isMuseGlimmer || isGranite42) false else null
+                inferenceService.setGenerationParameters(null, null, null, null, enableThinking = useThinking, contextWindow = vibeVoiceCtx)
                 inferenceService.loadModel(
                     model = model,
                     preferredBackend = _selectedBackend.value,

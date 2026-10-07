@@ -4,19 +4,49 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Required for AdMob on Android 13+ (advertising ID access) -->
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Agent feature: calendar, alarm, email, SMS -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.SET_ALARM" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Required for Agent/MCP commands executed inside the separately installed Termux app. -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
 
     <!-- add twinstef 26/12/2025 -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSERT" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.EDIT" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+        </intent>
+        <!-- Termux AIDL for Agent run_command tool -->
+        <package android:name="com.termux" />
     </queries>
     <!-- end -->
+
 
     <application
         android:name=".LlmHubApplication"
@@ -38,11 +68,7 @@
         <!-- Declare 16 KB page size support for Google Play (required for native libraries) -->
         <property android:name="android.app.16kb_page_agnostic" android:value="true" />
 
-        <!-- AdMob App ID (value injected from BuildConfig / manifest placeholder) -->
-        <meta-data
-            android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="${admobAppId}"/>
-        
+
         <!-- OpenCL libraries for MediaPipe Image Generator and LiteRT-LM (Android 12+) -->
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
@@ -74,6 +100,11 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".agent.TermuxResultService"
+            android:enabled="true"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

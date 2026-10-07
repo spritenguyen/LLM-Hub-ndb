@@ -42,34 +42,34 @@
 "about_llm_hub" = "Über LLM Hub";
 "about_description" = "LLM Hub ist eine Open-Source-Anwendung, die die Macht der Large Language Models direkt auf Ihr mobiles Gerät bringt. Erleben Sie KI-Gespräche mit hochmodernen Modellen wie Gemma, Llama und Phi - alle laufen lokal auf Ihrem Telefon für maximale Privatsphäre und Offline-Zugänglichkeit.";
 "key_features" = "Hauptfunktionen";
-"feature_multiple_models" = "🤖 Mehrere LLM-Modelle: Gemma-3, Llama-3.2, Phi-4, und Translate Gemma";
-"feature_on_device" = "📱 Geräteverarbeitung: Vollständige Privatsphäre, kein Internet erforderlich";
-"feature_vision_support" = "🖼️ Vision-Unterstützung: Multimodale Modelle, die Bilder verstehen";
-"feature_gpu_acceleration" = "⚡ GPU-Beschleunigung: Optimierte Leistung auf unterstützten Geräten";
-"feature_offline_usage" = "💾 Offline-Nutzung: Chatten ohne Internetverbindung";
-"feature_privacy_first" = "🔒 Privatsphäre zuerst: Ihre Gespräche verlassen nie Ihr Gerät";
-"feature_modern_ui" = "🎨 Moderne Benutzeroberfläche: Saubere, intuitive Material Design-Oberfläche";
+"feature_multiple_models" = "Mehrere LLM-Modelle: Gemma-3, Llama-3.2, Phi-4, und Translate Gemma";
+"feature_on_device" = "Geräteverarbeitung: Vollständige Privatsphäre, kein Internet erforderlich";
+"feature_vision_support" = "Vision-Unterstützung: Multimodale Modelle, die Bilder verstehen";
+"feature_gpu_acceleration" = "GPU-Beschleunigung: Optimierte Leistung auf unterstützten Geräten";
+"feature_offline_usage" = "Offline-Nutzung: Chatten ohne Internetverbindung";
+"feature_privacy_first" = "Privatsphäre zuerst: Ihre Gespräche verlassen nie Ihr Gerät";
+"feature_modern_ui" = "Moderne Benutzeroberfläche: Saubere, intuitive Material Design-Oberfläche";
 "developer_info" = "Entwicklerinformationen";
 "about_developer_info" = "Dieses Projekt wird von einem Enthusiasten entwickelt, der leidenschaftlich daran arbeitet, KI-Technologie für alle zugänglicher zu machen. Ihr Feedback und Ihre Beiträge sind immer willkommen!";
 "tech_stack" = "Technologie-Stack";
 "about_tech_stack" = "LLM Hub ist mit Swift, SwiftUI und der llama.cpp-Bibliothek für effiziente Geräteinferenz erstellt.";
-"tech_kotlin_compose" = "🏗️ Erstellt mit Kotlin und Jetpack Compose";
-"tech_mediapipe_litert" = "🧠 Angetrieben von MediaPipe und LiteRT";
-"tech_quantization" = "🚀 Optimiert mit INT4/INT8-Quantisierung";
-"tech_gpu_acceleration" = "⚡ GPU-Beschleunigung über LiteRT XNNPACK";
-"tech_models_source" = "🔗 Modelle von HuggingFace und Google";
+"tech_kotlin_compose" = "Erstellt mit Kotlin und Jetpack Compose";
+"tech_mediapipe_litert" = "Angetrieben von MediaPipe und LiteRT";
+"tech_quantization" = "Optimiert mit INT4/INT8-Quantisierung";
+"tech_gpu_acceleration" = "GPU-Beschleunigung über LiteRT XNNPACK";
+"tech_models_source" = "Modelle von HuggingFace und Google";
 "contact_support" = "Kontakt und Support";
 "contact_email" = "Kontakt-E-Mail:";
 "source_code" = "Quellcode:";
 "github_repository" = "GitHub-Repository";
 "acknowledgments" = "Danksagungen";
 "acknowledgments_text" = "Besonderen Dank an Google, Meta, Microsoft, IBM und die HuggingFace-Community für die Bereitstellung der unglaublichen LLM-Modelle, die diese Anwendung antreiben. Dieses Projekt stützt sich auch auf die erstaunliche Arbeit der Android-Entwicklergemeinschaft und des Open-Source-Ökosystems.";
-"sd_models_credit" = "Bildgenerierungsmodelle werden von xororz\'s Stable Diffusion-Implementierungen mit Qualcomm QNN (NPU) und Alibaba MNN (CPU) Backends betrieben.";
+"sd_models_credit" = "Bildgenerierungsmodelle werden von xororz\'s Stable Diffusion-Implementierungen mit Qualcomm QNN (NPU) und CPU Backends betrieben.";
 "nexa_sdk_credit" = "GGUF-Modellinferenz wird von Nexa SDK bereitgestellt.";
 "ai_thinking" = "KI denkt nach...";
 "thinking_label" = "Denken";
 "thinking_tokens" = "Denken (%1$d Tokens)";
-"version_number" = "Version 3.8.3";
+"version_number" = "Version 4.4.2";
 "app_version" = "App-Version";
 "terms_of_service" = "Nutzungsbedingungen";
 "tos_last_updated" = "Zuletzt aktualisiert: 16. Juli 2025";
@@ -295,6 +295,9 @@
 "remaining" = "verbleibend";
 "auto_readout" = "Automatisches Vorlesen";
 "auto_readout_description" = "KI-Antworten nach dem Senden einer Anfrage automatisch laut vorlesen";
+"text_to_speech_voices" = "Text-zu-Sprache-Stimmen";
+"text_to_speech_voices_description" = "iOS-Stimmen für gesprochene Inhalte auswählen";
+"tts_voices_nav_hint" = "Gehe zu Einstellungen → Bedienungshilfen → Lesen & Sprechen → Stimmen.";
 "model_supports_multimodal" = "Vision+Audio+Text";
 "multimodal_format" = "%1$@+%2$@+Text";
 "gemma3n_e2b_gpu_requires_6gb" = "Benötigt mindestens 6GB RAM für GPU";
@@ -338,6 +341,7 @@
 "supports_vision" = "Unterstützt Vision";
 "supports_audio" = "Unterstützt Audio";
 "supports_gpu" = "Unterstützt GPU";
+"supports_mtp" = "Unterstützt MTP";
 "model_format" = "Modellformat";
 "context_window_size" = "Kontextfenster-Größe";
 "import_model" = "Modell Importieren";
@@ -394,7 +398,8 @@
 "translator_auto_detect" = "Automatisch erkennen";
 "translator_translate" = "Übersetzen";
 "translator_result" = "Übersetzung";
-"translator_requires_gemma3n" = "Diese Funktion erfordert ein Translate Gemma- oder Gemma 4-Modell. Bitte laden Sie eines vom Modellbildschirm herunter.";
+"translator_requires_gemma3n" = "Jedes LLM-Modell kann für Übersetzungen verwendet werden. Gemma 4-Modelle werden für die beste mehrsprachige Leistung empfohlen.";
+"translator_load_model_desc" = "Laden Sie ein beliebiges LLM-Modell herunter, um mit dem Übersetzen zu beginnen. Gemma 4-Modelle werden für die beste mehrsprachige Leistung empfohlen.";
 "transcriber_title" = "Offline-Transkriptor";
 "transcriber_record" = "Audio aufnehmen";
 "transcriber_upload" = "Audio hochladen";
@@ -472,6 +477,7 @@
 "lang_bulgarian" = "Bulgarisch";
 "lang_burmese" = "Birmanisch";
 "lang_catalan" = "Katalanisch";
+"lang_central_kurdish" = "Zentralkurdisch (Sorani)";
 "lang_chinese" = "Chinesisch (Vereinfacht)";
 "lang_chinese_traditional" = "Chinesisch (Traditionell)";
 "lang_croatian" = "Kroatisch";
@@ -675,7 +681,6 @@
 "gpu_layers_hint" = "Layers offloaded to GPU/NPU. 0 = CPU only, 999 = all layers";
 "premium_title" = "LLM Hub Premium Lifetime";
 "premium_subtitle" = "Vollständige Erfahrung freischalten";
-"premium_feature_no_ads" = "Keine Werbung, nie";
 "premium_feature_vibe_coder" = "VibeCoder – KI-Code-Generator";
 "premium_feature_image_gen" = "Bildgenerator – KI-Kunst auf dem Gerät";
 "premium_feature_tts" = "Text-zu-Sprache automatisch vorlesen";
@@ -697,8 +702,6 @@
 "premium_restore_success" = "Kauf erfolgreich wiederhergestellt!";
 "premium_restore_nothing" = "Kein früherer Kauf gefunden.";
 "premium_go_premium" = "Premium werden";
-"privacy_ads_title" = "Datenschutz & Werbung";
-"privacy_ads_subtitle" = "Werbe-Personalisierung und Einwilligungen verwalten";
 "export" = "Exportieren";
 "home_section_tools" = "Tools";
 "home_section_utilities" = "Dienstprogramme";
@@ -779,5 +782,117 @@
 "whisper_live_transcription" = "Live-Whisper-Transkription";
 "whisper_transcribing" = "Whisper transkribiert…";
 
+"prompt_template_optional" = "Prompt-Vorlage (Optional)";
+"prompt_template_placeholder" = "e.g. <|im_start|>usern{{USER}}<|im_end|>n<|im_start|>assistantn{{ASSISTANT}}<|im_end|>";
+"prompt_template_hint" = "Verwende {{SYSTEM}}, {{USER}}, {{ASSISTANT}} als Platzhalter";
+
 "on_device_ai_engine" = "ON-DEVICE-KI-ENGINE";
 "secure_private" = "SICHER & PRIVAT";
+"language_chinese_traditional" = "繁體中文";
+
+// MARK: - Agent Feature
+"feature_agent" = "Agent";
+"feature_agent_desc" = "KI-Assistent mit Tools und Aktionen";
+"premium_feature_agent" = "Agent – KI mit Tools und Geräteaktionen";
+"agent_title" = "Agent";
+"agent_subtitle" = "Frag mich alles — ich kann suchen, kartieren, kalendarisieren und mehr";
+"agent_input_placeholder" = "Agenten fragen…";
+"agent_voice_mode_system" = "System";
+"agent_voice_mode_whisper" = "Whisper";
+"agent_voice_mode_gemma" = "Gemma";
+"agent_tool_running" = "Wird ausgeführt: %@";
+"agent_tool_success" = "Fertig";
+"agent_tool_failed" = "Fehlgeschlagen";
+"agent_tool_confirm_title" = "Aktion erlauben?";
+"agent_tool_confirm_body" = "Der Agent möchte: %@";
+"agent_tool_approve" = "Erlauben";
+"agent_tool_deny" = "Ablehnen";
+"agent_no_model" = "Bitte laden Sie ein Modell herunter, um den Agenten zu verwenden";
+"agent_map_expand" = "Vollkarte anzeigen";
+"agent_settings_voice_mode" = "Spracheingabemodus";
+"agent_settings_tools" = "Aktivierte Tools";
+"agent_shortcut_confirm" = "Verknüpfung ausführen: %@";
+"agent_calendar_confirm" = "Kalendereintrag erstellen: %@";
+
+"agent_welcome_message" = "Hallo! Ich bin Ihr KI-Agent. Ich kann im Web suchen, Karten anzeigen, Kalendertermine verwalten, das Wetter prüfen, Wecker stellen, Nachrichten senden und Hashes berechnen. Wie kann ich Ihnen heute helfen?";
+"agent_no_model_android" = "Bitte laden Sie zuerst das Modell Gemma 4 E2/4B herunter, um Agent zu verwenden";
+"agent_no_model_ios" = "Bitte laden Sie zuerst ein Modell herunter, um Agent zu verwenden";
+
+"open_maps" = "Karten öffnen";
+"agent_processing_tool" = "Agent verarbeitet Werkzeug...";
+
+"premium_feature_vibevoice" = "VibeVoice – Sprach- & Stimmen-KI";
+"premium_feature_vibecoder" = "VibeCode – KI-Codebuilder";
+"premium_feature_image_generator" = "Bildgenerator – KI-Kunst auf dem Gerät";
+"premium_feature_video_generator" = "Videogenerator – KI-Videoerstellung";
+"search_huggingface" = "Hugging Face durchsuchen";
+"search_huggingface_placeholder" = "GGUF- oder LiteRT-LM-Modelle suchen";
+"huggingface_results" = "Hugging-Face-Ergebnisse";
+"download_vision_projector" = "Vision-Projektor herunterladen";
+"huggingface_search_failed" = "Hugging-Face-Suche fehlgeschlagen";
+
+"language_hindi" = "हिन्दी";
+
+
+/* Music Generator */
+"feature_music_generator" = "Musik-Generator";
+"feature_music_generator_desc" = "Musik und Soundeffekte direkt auf dem Gerät generieren";
+"music_generation_models" = "Musik-Generierungsmodelle";
+"music_generation_models_description" = "On-Device KI-Modelle zur Erstellung von Musikstücken und Soundeffekten.";
+"music_prompt_label" = "Musikbeschreibung";
+"prompt_hint_music" = "Beschreiben Sie die gewünschte Musik oder den Soundeffekt...";
+"music_style_presets" = "Stil-Voreinstellungen";
+"music_tier_select" = "Generator-Stufe";
+"music_duration_label" = "Dauer";
+"generate_music" = "Musik generieren";
+"generating_music" = "Musik wird generiert...";
+"music_prompt_empty_warning" = "Bitte geben Sie eine Beschreibung der gewünschten Musik ein.";
+"music_generated_success" = "Musik erfolgreich generiert!";
+"music_saved_toast" = "Audiodatei in lokaler Bibliothek gespeichert!";
+
+"music_generator_download_model" = "Modell zuerst herunterladen";
+"music_generator_download_model_desc" = "Lade ein Musikgenerierungsmodell vom Modellbildschirm herunter, um Musik zu generieren.";
+
+
+/* MCP Agent */
+"agent_mcp_settings" = "MCP-Einstellungen";
+"agent_mcp_title" = "MCP-Werkzeuge";
+"agent_mcp_description" = "MCP-Server verbinden und dem Agenten die Nutzung ihrer Werkzeuge erlauben.";
+"agent_mcp_transport" = "Transport";
+"agent_mcp_termux_stdio" = "Termux-stdio";
+"agent_mcp_remote_http" = "Remote-HTTP";
+"agent_mcp_command" = "MCP-Serverbefehl";
+"agent_mcp_termux_help" = "Führt den MCP-Server über Termux-stdio aus. Installiere zuerst die erforderlichen Pakete.";
+"agent_mcp_server_url" = "Server-URL";
+"agent_mcp_bearer_token" = "Bearer-Token (optional)";
+"agent_mcp_approval_notice" = "Jeder MCP-Werkzeugaufruf benötigt vor der Ausführung deine Zustimmung.";
+"agent_mcp_connecting" = "Verbindung wird hergestellt…";
+"agent_mcp_connected_tools" = "%d Werkzeuge verbunden";
+"agent_mcp_error" = "MCP-Fehler: %@";
+"agent_mcp_missing_required_arguments" = "Erforderliche MCP-Argumente fehlen: %@";
+"agent_mcp_connect" = "Verbinden";
+"agent_mcp_disconnect" = "Trennen";
+"agent_mcp_tool_request" = "MCP-Werkzeug: %@";
+"agent_mcp_allow" = "Erlauben";
+"agent_mcp_deny" = "Ablehnen";
+"agent_mcp_approval_required" = "Zustimmung erforderlich";
+"agent_mcp_denied" = "Vom Benutzer abgelehnt";
+"agent_mcp_status" = "Status";
+"agent_termux_tool_title" = "Termux-Shell-Befehl";
+
+
+/* Hugging Face Token */
+"hf_token_title" = "Hugging Face-Token";
+"hf_token_subtitle" = "Persönliches Zugriffs-Token für Modell-Downloads";
+"hf_token_dialog_title" = "Hugging Face-Zugriffstoken";
+"hf_token_explanation" = "Falls das Standard-Token fehlschlägt, Ratenbegrenzungen erreicht oder Sie geschützte Modelle mit akzeptierter Lizenz herunterladen möchten, geben Sie Ihr persönliches Lese-Token von huggingface.co/settings/tokens ein.";
+"hf_token_placeholder" = "Persönliches Token eingeben (hf_...)";
+"hf_token_using_default" = "Standard-Token aktiv";
+"hf_token_custom_active" = "Benutzerdefiniertes Token aktiv";
+"hf_token_clear" = "Auf Standard zurücksetzen";
+
+/* Edit Prompt Template */
+"edit" = "Bearbeiten";
+"prompt_template" = "Prompt-Vorlage";
+"edit_prompt_template" = "Prompt-Vorlage bearbeiten";
+"prompt_template_none" = "Keine (Standard)";

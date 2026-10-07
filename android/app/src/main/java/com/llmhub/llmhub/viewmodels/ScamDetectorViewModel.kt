@@ -2,12 +2,13 @@ package com.llmhub.llmhub.viewmodels
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
+import com.llmhub.llmhub.utils.loadInferenceBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.llmhub.llmhub.data.LLMModel
+import com.llmhub.llmhub.data.effectiveContextWindow
 import com.llmhub.llmhub.data.ModelAvailabilityProvider
 import com.llmhub.llmhub.data.ModelConfig
 import com.llmhub.llmhub.data.ModelPreferences
@@ -27,7 +28,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import com.llmhub.llmhub.data.DeviceInfo
 
 class ScamDetectorViewModel(application: Application) : AndroidViewModel(application) {
     
@@ -160,9 +160,9 @@ class ScamDetectorViewModel(application: Application) : AndroidViewModel(applica
             }
 
             val model = _selectedModel.value
-            if (model?.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-                _selectedBackend.value = LlmInference.Backend.GPU
-                _selectedNpuDeviceId.value = "dev0"
+            if (model?.modelFormat == "gguf" && !prefs.contains("selected_backend")) {
+                _selectedBackend.value = LlmInference.Backend.CPU
+                _selectedNpuDeviceId.value = null
             }
         }
     }
@@ -185,9 +185,9 @@ class ScamDetectorViewModel(application: Application) : AndroidViewModel(applica
         if (isGemma4_12B) {
             _selectedBackend.value = LlmInference.Backend.GPU
             _selectedNpuDeviceId.value = null
-        } else if (model.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported() && _selectedNpuDeviceId.value == null) {
-            _selectedBackend.value = LlmInference.Backend.GPU
-            _selectedNpuDeviceId.value = "dev0"
+        } else if (model.modelFormat == "gguf") {
+            _selectedBackend.value = LlmInference.Backend.CPU
+            _selectedNpuDeviceId.value = null
         } else {
             _selectedBackend.value = if (model.supportsGpu) {
                 _selectedBackend.value ?: LlmInference.Backend.GPU
@@ -244,7 +244,7 @@ class ScamDetectorViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun setMaxTokens(maxTokens: Int) {
-        val cap = _selectedModel.value?.contextWindowSize?.coerceAtLeast(1) ?: 4096
+        val cap = _selectedModel.value?.effectiveContextWindow(getApplication<Application>()) ?: 4096
         _selectedMaxTokens.value = maxTokens.coerceIn(1, cap)
         saveSettings()
     }
@@ -274,6 +274,8 @@ class ScamDetectorViewModel(application: Application) : AndroidViewModel(applica
                 disableAudioOverride = true,
                 backendOverride = _selectedBackend.value,
                 deviceIdOverride = _selectedNpuDeviceId.value,
+                enableThinkingOverride = _enableThinking.value,
+                disableAgentTools = true,
                 onConfigApplied = { cfg ->
                     lastAppliedModelName = model.name
                     lastAppliedConfig = cfg
@@ -398,6 +400,13 @@ class ScamDetectorViewModel(application: Application) : AndroidViewModel(applica
                 
                 // Reset GGUF KV cache so same prompt submitted again doesn't produce 0 tokens
                 inferenceService.resetChatSession(chatId)
+                
+                // Force agent tools OFF — scam detector has no tool toggle
+                (inferenceService as? com.llmhub.llmhub.inference.UnifiedInferenceService)?.setAgentToolsEnabled(false)
+                // Apply thinking state from toggle (or false if toggle not shown)
+                val isGranite42 = model.name.contains("granite-4.2", ignoreCase = true) || model.name.contains("granite 4.2", ignoreCase = true)
+                val useThinking = if (model.name.contains("Muse Glimmer", ignoreCase = true) || model.name.contains("muse-glimmer", ignoreCase = true) || isGranite42) false else _enableThinking.value
+                inferenceService.setGenerationParameters(null, null, null, null, enableThinking = useThinking)
                 
                 // Generate analysis using inference service
                 val responseFlow = inferenceService.generateResponseStreamWithSession(
@@ -607,22 +616,13 @@ Be thorough and specific in your analysis. If you detect a scam, clearly state i
         return withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Opening input stream for URI: $uri")
-                val inputStream = context.contentResolver.openInputStream(uri)
-                if (inputStream != null) {
-                    inputStream.use { stream ->
-                        val bitmap = BitmapFactory.decodeStream(stream)
-                        if (bitmap != null) {
-                            Log.d(TAG, "Bitmap decoded successfully: ${bitmap.width}x${bitmap.height}")
-                            bitmap
-                        } else {
-                            Log.w(TAG, "BitmapFactory.decodeStream returned null")
-                            null
-                        }
-                    }
+                val bitmap = loadInferenceBitmap(context, uri)
+                if (bitmap != null) {
+                    Log.d(TAG, "Bitmap decoded successfully: ${bitmap.width}x${bitmap.height}")
                 } else {
-                    Log.w(TAG, "Failed to open input stream for URI: $uri")
-                    null
+                    Log.w(TAG, "Failed to decode image URI: $uri")
                 }
+                bitmap
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load image from URI: $uri", e)
                 null

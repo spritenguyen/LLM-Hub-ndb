@@ -1,7 +1,5 @@
 import java.util.Properties
 import java.io.FileInputStream
-import java.util.zip.ZipFile
-import java.util.zip.ZipEntry
 
 // Load local.properties at the top-level so it's available everywhere
 val localProperties = Properties()
@@ -20,13 +18,14 @@ plugins {
 android {
     namespace = "com.llmhub.llmhub"
     compileSdk = 37
+    ndkVersion = "29.0.13113456"
 
     defaultConfig {
         applicationId = "com.llmhub.llmhub"
         minSdk = 27
         targetSdk = 37
-        versionCode = 124
-        versionName = "3.8.3"
+        versionCode = 160
+        versionName = "4.4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val hfToken: String = localProperties.getProperty("HF_TOKEN", "")
@@ -34,21 +33,7 @@ android {
         val debugPremium: Boolean = localProperties.getProperty("DEBUG_PREMIUM", "false").toBoolean()
         buildConfigField("Boolean", "DEBUG_PREMIUM", "$debugPremium")
 
-        // AdMob IDs — override in local.properties; test IDs are the defaults
-        val admobAppId: String = localProperties.getProperty(
-            "ADMOB_APP_ID", "ca-app-pub-3940256099942544~3347511713")
-        val admobBannerId: String = localProperties.getProperty(
-            "ADMOB_BANNER_ID", "ca-app-pub-3940256099942544/6300978111")
-        val admobInterstitialId: String = localProperties.getProperty(
-            "ADMOB_INTERSTITIAL_ID", "ca-app-pub-3940256099942544/1033173712")
-        val admobRewardedId: String = localProperties.getProperty(
-            "ADMOB_REWARDED_ID", "ca-app-pub-3940256099942544/5224354917")
-        buildConfigField("String", "ADMOB_APP_ID", "\"$admobAppId\"")
-        buildConfigField("String", "ADMOB_BANNER_ID", "\"$admobBannerId\"")
-        buildConfigField("String", "ADMOB_INTERSTITIAL_ID", "\"$admobInterstitialId\"")
-        buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobRewardedId\"")
-        manifestPlaceholders["admobAppId"] = admobAppId
-        
+
         // Enable 16KB page size support for Android 15+ compatibility
         // Required for Google Play Store submission starting Nov 1st, 2025
         ndk {
@@ -58,24 +43,30 @@ android {
             // to rebuild native libraries with 16KB alignment
             debugSymbolLevel = "FULL"
         }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf(
+                    "-DCMAKE_BUILD_TYPE=Release",
+                    "-DANDROID_STL=c++_static"
+                )
+            }
+        }
     }
     
     // Specify supported locales to ensure proper resource loading
     // Note: Indonesian uses both "id" (modern) and "in" (legacy) for maximum compatibility
     androidResources {
-        localeFilters += listOf("en", "es", "pt", "de", "fr", "ru", "it", "tr", "pl", "ar", "ja", "id", "in", "ko", "fa", "he", "iw", "uk", "zh")
+        localeFilters += listOf("en", "es", "pt", "de", "fr", "ru", "it", "tr", "pl", "ar", "ja", "id", "in", "ko", "fa", "he", "iw", "hi", "uk", "zh", "nl", "da", "th", "vi")
     }
 
     // Configure asset packs for install-time delivery
-    // geniex_npu_pack delivers QNN HTP runtime libs (~175 MB)
-    // keeping the base module well under Play Store's 200 MB limit
-    assetPacks += mutableSetOf(":qnn_pack", ":sd_pack", ":geniex_npu_pack")
+    assetPacks += mutableSetOf(":qnn_pack", ":sd_pack")
 
     buildTypes {
         release {
-            // Disable R8 minification to prevent stripping ONNX/GenieX JNI classes
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // Enable R8 code shrinking and obfuscation to meet Google Play's 25% threshold
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -85,6 +76,12 @@ android {
                 debugSymbolLevel = "NONE"
             }
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.31.6"
         }
     }
     compileOptions {
@@ -139,7 +136,7 @@ android {
             // Android only enforces 16KB page alignment on API 35+ devices with new kernel.
             // These libs still load correctly on all current devices; suppress the build warning.
             // Track: https://github.com/argmaxinc/WhisperKitAndroid/issues
-            // Exclude QNN HTP runtime libs from base module — delivered via geniex_npu_pack asset pack
+            // QNN runtime libraries for other features are delivered separately.
             // NOTE: libQnnTFLiteDelegate.so must NOT be excluded — WhisperKit needs it in the APK
             excludes += setOf(
                 "**/libQnnHtp*.so",
@@ -354,13 +351,21 @@ dependencies {
     // vision/audio component initialization. Disable vision/audio when not needed for faster loading.
     // tasks-genai latest: 0.10.29; tasks-text latest: 0.10.29
     implementation("com.google.mediapipe:tasks-genai:0.10.35")
-    implementation("com.google.mediapipe:tasks-vision:0.10.35")
-    implementation("com.google.mediapipe:tasks-text:0.10.35")
+    implementation("com.google.mediapipe:tasks-vision:1.0.0")
+    implementation("com.google.mediapipe:tasks-text:1.0.0")
 
     // LiteRT-LM: native Kotlin API for .litertlm models (Gemma-3n, Gemma-4, etc.)
     // Replaces tasks-genai for litertlm format models. GPU enabled once 0.10.1 hits Maven.
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.13.1")
-    
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.17.1")
+
+    // CompiledModel API used by the local SoundGen text/core/decoder pipeline.
+    // CompiledModel runtime used by SoundGen. Keep this pinned to the latest
+    // tested LiteRT release; 2.1.0 fails while invoking the DiT on Samsung OpenCL.
+    implementation("com.google.ai.edge.litert:litert:2.1.6")
+
+    // TensorFlow Lite interpreter used by other legacy TFLite features.
+    implementation("org.tensorflow:tensorflow-lite:2.17.0")
+
     // Protobuf - required for MediaPipe
     implementation("com.google.protobuf:protobuf-java:3.25.1")
     // Provide a no-op SLF4J binder so R8 finds org.slf4j.impl.StaticLoggerBinder
@@ -382,9 +387,6 @@ dependencies {
     // IPA Transcribers - pure-Kotlin G2P fallback for Kokoro TTS
     implementation("com.github.medavox:IPA-Transcribers:v0.2")
 
-    // GenieX SDK for GGUF model support (LLM/VLM inference on CPU/GPU/NPU)
-    implementation(files("libs/geniex-android-0.3.14.aar"))
-
     // WhisperKit for fast on-device ASR (TFLite + QNN NPU acceleration)
     implementation("com.argmaxinc:whisperkit:0.3.3")
     implementation("com.qualcomm.qti:qnn-runtime:2.34.0")
@@ -394,13 +396,14 @@ dependencies {
     implementation("com.google.android.play:asset-delivery:2.2.2")
     implementation("com.google.android.play:asset-delivery-ktx:2.2.2")
 
-    // Google Play Billing (IAP)
-    implementation("com.android.billingclient:billing-ktx:7.1.1")
+    // Google Play Billing (IAP) - updated to latest v9.1.0 (Google Play requirement >= 8.0.0)
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
 
-    // AdMob
-    implementation("com.google.android.gms:play-services-ads:23.6.0")
-    // AdMob UMP SDK — EU consent (GDPR) form
-    implementation("com.google.android.ump:user-messaging-platform:3.1.0")
+    // OpenStreetMap (osmdroid) — in-app map view for Agent feature, no API key required
+    implementation(libs.osmdroid)
+
+
+
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -411,77 +414,8 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 }
 
-// ── Extract QNN HTP .so files from GenieX AAR into geniex_npu_pack ──────────────
-// GenieX 0.3.12 bundles ~175 MB of QNN HTP runtime libs (libQnn*, libPlatformValidator,
-// libCalculator, libhta*) in its jni/arm64-v8a/ folder. We extract them into the
-// geniex_npu_pack asset pack source directory so Play Asset Delivery can serve them
-// at install time. This keeps the base module well under Play Store's 200 MB limit.
-//
-// The extracted libs are stripped from the main jniLibs via packaging excludes below.
-// At runtime, the app extracts them from the asset pack to filesDir and loads via dlopen.
-// For APK sideloads, NPU falls back to GPU / CPU automatically.
-
-val geniexAarConfig by configurations.creating {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-}
-dependencies { geniexAarConfig(files("libs/geniex-android-0.3.14.aar")) }
-
-val npuPackAssetsDir = rootProject.file("geniex_npu_pack/src/main/assets/npu")
-
-val extractGeniexNpuAssets by tasks.registering {
-    description = "Extracts QNN HTP .so files from GenieX AAR into geniex_npu_pack"
-    group = "build setup"
-    inputs.files(geniexAarConfig)
-    outputs.dir(npuPackAssetsDir)
-    outputs.upToDateWhen {
-        npuPackAssetsDir.resolve("libQnnHtp.so").exists()
-    }
-    doLast {
-        val aar = geniexAarConfig.singleFile
-        npuPackAssetsDir.deleteRecursively()
-        npuPackAssetsDir.mkdirs()
-        var extracted = 0
-        ZipFile(aar).use { zip ->
-            zip.entries().toList().asSequence()
-                .filter { !it.isDirectory && it.name.startsWith("jni/arm64-v8a/") }
-                .filter { entry ->
-                    val name = entry.name.substringAfterLast("/")
-                    name.startsWith("libQnn") ||
-                    name.startsWith("libPlatformValidator") ||
-                    name.startsWith("libCalculator") ||
-                    name.startsWith("libcalculator") ||
-                    name.startsWith("libhta") ||
-                    name.startsWith("libNetRunDirect")
-                }
-                .forEach { entry ->
-                    val fileName = entry.name.substringAfterLast("/")
-                    val target = npuPackAssetsDir.resolve(fileName)
-                    target.parentFile.mkdirs()
-                    zip.getInputStream(entry).use { src ->
-                        target.outputStream().use { dst -> src.copyTo(dst) }
-                    }
-                    extracted++
-                }
-        }
-        logger.lifecycle("extractGeniexNpu: extracted $extracted files → ${npuPackAssetsDir.absolutePath}")
-    }
-}
-
 // Detect at configuration time whether this is an AAB bundle build or an APK build.
 val isBundleBuild = gradle.startParameter.taskNames.any { it.contains("bundle", ignoreCase = true) }
-
-// Run extraction + wire dependency only during AAB bundle builds
-if (isBundleBuild) {
-    tasks.configureEach {
-        val n = name
-        if ((n.startsWith("merge") && n.contains("Assets", ignoreCase = true)) ||
-            (n.startsWith("assetPack") && n.contains("PreBundleTask", ignoreCase = true))
-        ) {
-            dependsOn(extractGeniexNpuAssets)
-        }
-    }
-}
 
 // ── Strip ALL assets/npu/, cvtbase/, qnnlibs/ from base module (AAB builds only) ──────
 // npu/cvtbase/qnnlibs are delivered via asset packs in AAB; strip from base merged output.

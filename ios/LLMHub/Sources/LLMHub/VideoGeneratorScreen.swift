@@ -57,8 +57,7 @@ struct VideoGeneratorScreen: View {
         .navigationTitle(settings.localized("video_generator_title"))
         .navigationBarTitleDisplayMode(.inline)
         .apolloScreenBackground()
-        .safeAreaInset(edge: .bottom, spacing: 0) { BannerAdContainer() }
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .apolloNavigationBackground()
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -73,7 +72,7 @@ struct VideoGeneratorScreen: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
+        .apolloSheet(isPresented: $showSettings) {
             VideoGeneratorSettingsSheet(
                 steps: $storedSteps,
                 motionStrength: $storedMotionStrength,
@@ -615,8 +614,10 @@ struct VideoGeneratorSettingsSheet: View {
                 }
                 .padding()
             }
+            .apolloScreenBackground()
             .navigationTitle(settings.localized("feature_settings_title"))
             .navigationBarTitleDisplayMode(.inline)
+            .apolloNavigationBackground()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(settings.localized("close")) { dismiss() }

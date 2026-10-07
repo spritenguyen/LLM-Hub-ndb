@@ -2,8 +2,7 @@ import SwiftUI
 
 // MARK: - Thinking Token Parsing
 
-/// Sentinel constants — must match values emitted by the inference backend
-/// (OnnxInferenceService / NexaInferenceService on Android; RunAnywhere on iOS).
+/// Sentinel constants used by thinking-aware model output across backends.
 private let kSentinelThink    = "\u{200B}\u{200B}THINK\u{200B}\u{200B}"
 private let kSentinelEndThink = "\u{200B}\u{200B}ENDTHINK\u{200B}\u{200B}"
 private let kRawOpenThink     = "<think>"
@@ -21,47 +20,70 @@ private func stripHarmonyAnalysisPrefix(_ text: String) -> String {
 
 /// Returns `true` when `content` contains any recognised thinking marker
 /// (even if the thinking text after the tag is still empty during streaming).
+private func isRawThinkPrefix(_ text: String) -> Bool {
+    let sanitized = text.replacingOccurrences(of: "\u{200B}", with: "")
+    let trimmed = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.hasPrefix("THINK (") || trimmed.hasPrefix("THINK:") || trimmed.hasPrefix("THINK\n") || trimmed.hasPrefix("THINK 1")
+}
+
 func contentHasThinkingMarkers(_ content: String) -> Bool {
-    content.contains(kRawOpenThink) || content.contains(kSentinelThink)
+    if content.contains(kRawOpenThink) || content.contains(kSentinelThink)
         || content.contains(kRawCloseThink) || content.contains(kSentinelEndThink)
+        || content.contains("THINK\u{200B}\u{200B}") {
+        return true
+    }
+    return isRawThinkPrefix(content)
 }
 
 /// Split `content` into `(thinkingPart, answerPart)`.
 /// Returns `("", content)` when no thinking markers are present.
 func parseThinkingAndAnswer(_ content: String) -> (thinking: String, answer: String) {
-    // 1) Sentinel-wrapped thinking (RunAnywhere / Nexa backend)
+    // 1) Sentinel-wrapped thinking
     if content.contains(kSentinelThink) {
         let afterThink = content.substringAfterFirst(kSentinelThink)
         if afterThink.contains(kSentinelEndThink) {
             let thinking = stripHarmonyAnalysisPrefix(afterThink.substringBeforeFirst(kSentinelEndThink))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             let answer   = afterThink.substringAfterFirst(kSentinelEndThink)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             return (thinking, answer)
         }
         // Sentinel open but no close yet — still streaming thinking
-        return (stripHarmonyAnalysisPrefix(afterThink), "")
+        return (stripHarmonyAnalysisPrefix(afterThink).trimmingCharacters(in: .whitespacesAndNewlines), "")
     }
-    // 2) Raw <think>…</think>
+    // 1b) ZWSP partially stripped sentinel (e.g. leading ZWSP removed by trim)
+    if content.contains("THINK\u{200B}\u{200B}") {
+        let afterThink = content.substringAfterFirst("THINK\u{200B}\u{200B}")
+        if afterThink.contains(kSentinelEndThink) {
+            let thinking = stripHarmonyAnalysisPrefix(afterThink.substringBeforeFirst(kSentinelEndThink))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let answer   = afterThink.substringAfterFirst(kSentinelEndThink)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return (thinking, answer)
+        }
+        return (stripHarmonyAnalysisPrefix(afterThink).trimmingCharacters(in: .whitespacesAndNewlines), "")
+    }
+    // 2) Closing sentinel only: everything before the close marker is thinking,
+    // everything after it is the visible answer.
+    if content.contains(kSentinelEndThink) {
+        let thinking = stripHarmonyAnalysisPrefix(content.substringBeforeFirst(kSentinelEndThink))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let answer = content.substringAfterFirst(kSentinelEndThink)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (thinking, answer)
+    }
+    // 3) Raw <think>…</think>
     if content.contains(kRawOpenThink) {
         let afterOpen = content.substringAfterFirst(kRawOpenThink)
         if afterOpen.contains(kRawCloseThink) {
             let thinking = afterOpen.substringBeforeFirst(kRawCloseThink)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             let answer   = afterOpen.substringAfterFirst(kRawCloseThink)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return (thinking, answer)
         }
         // <think> open but no </think> yet — still streaming
-        return (afterOpen, "")
-    }
-    // 3) Closing sentinel only: everything before the close marker is thinking,
-    // everything after it is the visible answer.
-    if content.contains(kSentinelEndThink) {
-        let thinking = content.substringBeforeFirst(kSentinelEndThink)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let answer = content.substringAfterFirst(kSentinelEndThink)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !thinking.isEmpty || !answer.isEmpty {
-            return (thinking, answer)
-        }
+        return (afterOpen.trimmingCharacters(in: .whitespacesAndNewlines), "")
     }
     // 4) Only a closing tag (model emitted </think> without explicit <think>)
     if content.contains(kRawCloseThink) {
@@ -69,7 +91,30 @@ func parseThinkingAndAnswer(_ content: String) -> (thinking: String, answer: Str
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let answer = content.substringAfterFirst(kRawCloseThink)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !thinking.isEmpty || !answer.isEmpty { return (thinking, answer) }
+        return (thinking, answer)
+    }
+    // 5) Raw "THINK (...)" prefix emitted by reasoning models
+    if isRawThinkPrefix(content) {
+        let sanitized = content.replacingOccurrences(of: "\u{200B}", with: "")
+        let trimmed = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+        let afterThink: String
+        if trimmed.hasPrefix("THINK (") {
+            afterThink = trimmed
+        } else if trimmed.hasPrefix("THINK:") {
+            afterThink = String(trimmed.dropFirst(6))
+        } else if trimmed.hasPrefix("THINK\n") {
+            afterThink = String(trimmed.dropFirst(6))
+        } else {
+            afterThink = trimmed
+        }
+        if let range = afterThink.range(of: "\n\n") {
+            let thinking = String(afterThink[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let answer = String(afterThink[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !answer.isEmpty {
+                return (thinking, answer)
+            }
+        }
+        return (afterThink.trimmingCharacters(in: .whitespacesAndNewlines), "")
     }
     return ("", content)
 }
@@ -93,7 +138,7 @@ func supportsUnmarkedStreamingThinkingHeuristic(forModelNamed modelName: String?
     }
 
     // Android gets GPT-OSS thinking via Harmony-aware backend formatting/parsing.
-    // The current iOS RunAnywhere path in this app does not surface those boundaries,
+    // The current iOS llama.cpp path in this app does not surface those boundaries,
     // so treating the raw stream as temporary reasoning creates a fake drawer that
     // later disappears. Disable the heuristic for GPT-OSS until real boundaries exist.
     if normalizedName.contains("gpt-oss") || normalizedName.contains("gpt_oss") {

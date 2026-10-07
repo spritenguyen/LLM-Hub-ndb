@@ -4,13 +4,20 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -22,7 +29,7 @@ import com.llmhub.llmhub.ui.theme.LlmHubTheme
 import com.llmhub.llmhub.viewmodels.ChatViewModelFactory
 import com.llmhub.llmhub.viewmodels.ThemeViewModel
 import com.llmhub.llmhub.utils.LocaleHelper
-import com.llmhub.llmhub.ads.ConsentManager
+import com.llmhub.llmhub.utils.CrashNotice
 
 class MainActivity : ComponentActivity() {
     private lateinit var themeViewModel: ThemeViewModel
@@ -33,11 +40,12 @@ class MainActivity : ComponentActivity() {
         val app = application as LlmHubApplication
         val chatRepository = app.chatRepository
         val chatViewModelFactory = ChatViewModelFactory(app, chatRepository, this)
+        val showCrashNotice = CrashNotice.consumeOnLaunch(this)
 
         // Initialize ThemeViewModel
         themeViewModel = ThemeViewModel(this)
 
-        enableEdgeToEdge()
+        WindowCompat.enableEdgeToEdge(window)
         setContent {
             val currentThemeMode by themeViewModel.themeMode.collectAsState()
             val currentLanguage by themeViewModel.appLanguage.collectAsState()
@@ -51,26 +59,32 @@ class MainActivity : ComponentActivity() {
 
             LlmHubTheme(themeMode = currentThemeMode) {
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
-                    LlmHubNavigation(
-                        navController = navController,
-                        chatViewModelFactory = chatViewModelFactory,
-                        themeViewModel = themeViewModel
-                    )
-                }
+                    var crashNoticeVisible by remember { mutableStateOf(showCrashNotice) }
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        val navController = rememberNavController()
+                        LlmHubNavigation(
+                            navController = navController,
+                            chatViewModelFactory = chatViewModelFactory,
+                            themeViewModel = themeViewModel
+                        )
+                    }
+                    if (crashNoticeVisible) {
+                        AlertDialog(
+                            onDismissRequest = { crashNoticeVisible = false },
+                            title = { Text(stringResource(R.string.crash_recovery_title)) },
+                            text = { Text(stringResource(R.string.crash_recovery_message)) },
+                            confirmButton = {
+                                TextButton(onClick = { crashNoticeVisible = false }) {
+                                    Text(stringResource(R.string.ok))
+                                }
+                            },
+                        )
+                    }
                 } // CompositionLocalProvider
             }
-        }
-
-        // Request EU consent AFTER setContent so the window is fully initialised.
-        // Using window.decorView.post ensures the view hierarchy is ready before
-        // the UMP SDK tries to attach its dialog.
-        window.decorView.post {
-            ConsentManager.requestConsentInfoUpdate(this)
         }
     }
     
@@ -87,5 +101,12 @@ class MainActivity : ComponentActivity() {
         }
         
         super.attachBaseContext(LocaleHelper.setLocale(newBase, savedLanguage))
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_BACKGROUND || level >= TRIM_MEMORY_MODERATE || level >= TRIM_MEMORY_RUNNING_CRITICAL) {
+            System.gc()
+        }
     }
 }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -228,8 +229,7 @@ class TtsService(private val context: Context, private val isTranslationFeature:
                         isCustomTts = true
                         isInitialized = true
                         currentModelDir = modelDir
-                        Log.d(TAG, "Custom Kokoro ONNX TTS initialized successfully with model: $selectedModel")
-                        // Preload CMU dict in background so first sentence has no dict-load stall
+                        initializeSystemTts()
                         startAudioTrackPlayback()
                         startSynthesisWorker()
                         flushPendingQueue()
@@ -316,6 +316,7 @@ class TtsService(private val context: Context, private val isTranslationFeature:
             enqueueSentences(sentences)
         } else {
             val cleanText = cleanTextForTts(text)
+            updateSystemTtsLanguage(cleanText)
             val chunks = splitIntoChunks(cleanText)
             Log.d(TAG, "speak() system TTS: split into ${chunks.size} chunks")
 
@@ -353,6 +354,7 @@ class TtsService(private val context: Context, private val isTranslationFeature:
             enqueueSentences(sentences)
         } else {
             val cleanText = cleanTextForTts(text)
+            updateSystemTtsLanguage(cleanText)
             val chunks = splitIntoChunks(cleanText)
             Log.d(TAG, "speakAppend() system TTS: split into ${chunks.size} chunks")
 
@@ -367,7 +369,11 @@ class TtsService(private val context: Context, private val isTranslationFeature:
     private fun startAudioTrackPlayback() {
         val sampleRate = 24000
         val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
-        val bufSize = maxOf(minBuf, sampleRate * 2 * 4) // at least 4 seconds (samples * bytes/sample * seconds)
+        // AudioTrack's default start threshold is its buffer capacity. A four-second
+        // buffer therefore never starts for short Kokoro output (for example, a
+        // single word producing 0.8 seconds of PCM). Keep a small streaming buffer;
+        // the playback worker continuously feeds longer output after preloading it.
+        val bufSize = maxOf(minBuf, sampleRate * 2 / 5) // at least 200 ms of mono PCM16
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -385,7 +391,6 @@ class TtsService(private val context: Context, private val isTranslationFeature:
             .setBufferSizeInBytes(bufSize)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
-        track.play()
         audioTrack = track
         totalSamplesWritten = 0L
 
@@ -400,13 +405,40 @@ class TtsService(private val context: Context, private val isTranslationFeature:
                 for (s in pcm) bb.putShort(s)
                 val bytes = bb.array()
                 var offset = 0
+
+                // AudioTrack was previously started when it was created, while Kokoro still
+                // needed a second or more to synthesize its first buffer. That guaranteed an
+                // underrun before any PCM arrived and some devices never advanced the playback
+                // head afterwards. Preload the first buffer, then start playback.
+                if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                    val preloaded = track.write(
+                        bytes,
+                        0,
+                        bytes.size,
+                        AudioTrack.WRITE_NON_BLOCKING
+                    )
+                    if (preloaded > 0) {
+                        offset = preloaded
+                        totalSamplesWritten += preloaded / 2L
+                    } else {
+                        Log.e(TAG, "Unable to preload Kokoro PCM: AudioTrack.write returned $preloaded")
+                    }
+
+                    if (offset > 0 && isActive) {
+                        track.play()
+                    }
+                }
+
                 while (offset < bytes.size && isActive) {
                     val written = track.write(bytes, offset, bytes.size - offset)
                     if (written <= 0) break
                     offset += written
+                    totalSamplesWritten += written / 2L
                 }
-                
-                totalSamplesWritten += pcm.size
+
+                if (offset < bytes.size) {
+                    Log.e(TAG, "Incomplete Kokoro PCM write: wrote $offset of ${bytes.size} bytes")
+                }
 
                 val rem = activeJobsCount.decrementAndGet().coerceAtLeast(0)
                 if (rem == 0) {
@@ -414,13 +446,28 @@ class TtsService(private val context: Context, private val isTranslationFeature:
                     delayJob = launch {
                         val trackInstance = audioTrack
                         if (trackInstance != null) {
+                            val targetSamples = totalSamplesWritten
+                            val initialPlayed = try {
+                                trackInstance.playbackHeadPosition.toLong() and 0xffffffffL
+                            } catch (_: Exception) {
+                                targetSamples
+                            }
+                            val samplesRemaining = (targetSamples - initialPlayed).coerceAtLeast(0L)
+                            // Playback-head reporting can stall after an audio-route change or a
+                            // device-side AudioTrack failure. Never leave the UI in Reading forever.
+                            val deadlineMs = android.os.SystemClock.elapsedRealtime() +
+                                (samplesRemaining * 1000L / sampleRate) + 2_000L
                             while (isActive && trackInstance.playState == AudioTrack.PLAYSTATE_PLAYING) {
                                 val played = try {
-                                    trackInstance.playbackHeadPosition.toLong()
-                                } catch (e: Exception) {
-                                    totalSamplesWritten
+                                    trackInstance.playbackHeadPosition.toLong() and 0xffffffffL
+                                } catch (_: Exception) {
+                                    targetSamples
                                 }
-                                if (played >= totalSamplesWritten) {
+                                if (played >= targetSamples) {
+                                    break
+                                }
+                                if (android.os.SystemClock.elapsedRealtime() >= deadlineMs) {
+                                    Log.w(TAG, "Timed out waiting for Kokoro playback completion: played=$played, target=$targetSamples")
                                     break
                                 }
                                 kotlinx.coroutines.delay(20)
@@ -476,7 +523,20 @@ class TtsService(private val context: Context, private val isTranslationFeature:
                     continue
                 }
 
-                val phonemes = englishToPhonemes(sentence)
+                val isChineseOrJapanese = voice.startsWith("zf") || voice.startsWith("zm") ||
+                        voice.startsWith("jf") || voice.startsWith("jm") ||
+                        sentence.any { it in '\u4E00'..'\u9FFF' || it in '\u3040'..'\u30FF' }
+
+                if (isChineseOrJapanese && tts != null) {
+                    Log.i(TAG, "Routing Chinese/Japanese sentence to System TTS for native speech")
+                    updateSystemTtsLanguage(sentence, voice)
+                    tts?.speak(sentence, TextToSpeech.QUEUE_ADD, null, "utterance_${utteranceId++}")
+                    val rem = activeJobsCount.decrementAndGet().coerceAtLeast(0)
+                    if (rem == 0) _isSpeaking.value = false
+                    continue
+                }
+
+                val phonemes = textToPhonemes(sentence, voice)
                 val tokens = mutableListOf<Int>()
                 tokens.add(0)
                 for (ch in phonemes) {
@@ -484,11 +544,21 @@ class TtsService(private val context: Context, private val isTranslationFeature:
                 }
                 tokens.add(0)
 
+                Log.d(TAG, "sentence='$sentence' phonemes='$phonemes' tokens=${tokens.size}")
+
+                if (tokens.size <= 2) {
+                    Log.w(TAG, "No tokens produced for '$sentence', falling back to system TTS")
+                    updateSystemTtsLanguage(sentence, voice)
+                    tts?.speak(sentence, TextToSpeech.QUEUE_ADD, null, "utterance_${utteranceId++}")
+                    val rem = activeJobsCount.decrementAndGet().coerceAtLeast(0)
+                    if (rem == 0) _isSpeaking.value = false
+                    continue
+                }
+
                 val seqLen = tokens.size.coerceIn(0, maxStyleRows - 1)
                 val styleVector = FloatArray(256).also {
                     System.arraycopy(voiceStyles, seqLen * 256, it, 0, 256)
                 }
-                Log.d(TAG, "sentence='$sentence' tokens=${tokens.size} seqLen=$seqLen")
 
                 synthesizeAndQueue(tokens, styleVector)
             }
@@ -694,6 +764,7 @@ class TtsService(private val context: Context, private val isTranslationFeature:
 
     fun stop() {
         synchronized(pendingSpeakQueue) { pendingSpeakQueue.clear() }
+        try { tts?.stop() } catch (_: Exception) {}
         if (isCustomTts) {
             synthesisScope.coroutineContext[Job]?.cancelChildren()
             stopAudioTrack()
@@ -706,7 +777,6 @@ class TtsService(private val context: Context, private val isTranslationFeature:
             _isSpeaking.value = false
             _currentText.value = ""
         } else {
-            tts?.stop()
             textBuffer.clear()
             inFlightUtterances.set(0)
             _isSpeaking.value = false
@@ -715,21 +785,17 @@ class TtsService(private val context: Context, private val isTranslationFeature:
     }
 
     fun pause() {
+        try { tts?.stop() } catch (_: Exception) {}
         if (isCustomTts) {
             try { audioTrack?.pause() } catch (_: Exception) {}
             _isSpeaking.value = false
         } else {
-            tts?.stop()
             _isSpeaking.value = false
         }
     }
 
     fun isSpeaking(): Boolean {
-        return if (isCustomTts) {
-            _isSpeaking.value
-        } else {
-            tts?.isSpeaking == true
-        }
+        return _isSpeaking.value || tts?.isSpeaking == true
     }
 
     fun setSpeechRate(rate: Float) {
@@ -979,6 +1045,456 @@ class TtsService(private val context: Context, private val isTranslationFeature:
         }
     }
 
+    private fun getLocaleForText(text: String, voice: String? = null): Locale {
+        val isDevanagari = text.any { it in '\u0900'..'\u097F' }
+        val isJapanese = text.any { it in '\u3040'..'\u30FF' || it in '\u31F0'..'\u31FF' || it in '\uFF66'..'\uFF9F' }
+        val isChinese = (text.any { it in '\u4E00'..'\u9FFF' } && !isJapanese) || voice?.startsWith("zf") == true || voice?.startsWith("zm") == true
+        val isKorean = text.any { it in '\uAC00'..'\uD7A3' || it in '\u1100'..'\u11FF' }
+
+        return when {
+            isJapanese || voice?.startsWith("jf") == true || voice?.startsWith("jm") == true -> Locale.JAPAN
+            isDevanagari || voice?.startsWith("hf") == true || voice?.startsWith("hm") == true -> Locale("hi", "IN")
+            isChinese -> Locale.SIMPLIFIED_CHINESE
+            isKorean -> Locale.KOREA
+            voice?.startsWith("ef") == true || voice?.startsWith("em") == true -> Locale("es", "ES")
+            voice?.startsWith("ff") == true || voice?.startsWith("fm") == true -> Locale.FRANCE
+            voice?.startsWith("if") == true || voice?.startsWith("im") == true -> Locale.ITALY
+            voice?.startsWith("pf") == true || voice?.startsWith("pm") == true -> Locale("pt", "PT")
+            voice?.startsWith("gf") == true || voice?.startsWith("gm") == true -> Locale.GERMANY
+            else -> Locale.getDefault()
+        }
+    }
+
+    private fun updateSystemTtsLanguage(text: String, voiceParam: String? = null) {
+        try {
+            val voice = voiceParam ?: runCatching { runBlocking { themePreferences.selectedTtsVoice.first() } }.getOrNull()
+            val locale = getLocaleForText(text, voice)
+            val res = tts?.setLanguage(locale)
+            Log.d(TAG, "updateSystemTtsLanguage: setLanguage to $locale, result=$res")
+        } catch (e: Exception) {
+            Log.w(TAG, "updateSystemTtsLanguage failed: ${e.message}")
+        }
+    }
+
+    private fun textToPhonemes(text: String, voice: String): String {
+        val hasDevanagari = text.any { it in '\u0900'..'\u097F' }
+        val hasJapanese = text.any { it in '\u3040'..'\u30FF' || it in '\u31F0'..'\u31FF' || it in '\uFF66'..'\uFF9F' }
+        val hasChinese = (text.any { it in '\u4E00'..'\u9FFF' } && !hasJapanese) || voice.startsWith("zf") || voice.startsWith("zm")
+        val voiceLang = when {
+            hasJapanese || voice.startsWith("jf") || voice.startsWith("jm") -> "ja"
+            hasDevanagari || voice.startsWith("hf") || voice.startsWith("hm") -> "hi"
+            hasChinese -> "zh"
+            voice.startsWith("ef") || voice.startsWith("em") -> "es"
+            voice.startsWith("ff") || voice.startsWith("fm") -> "fr"
+            voice.startsWith("if") || voice.startsWith("im") -> "it"
+            voice.startsWith("pf") || voice.startsWith("pm") -> "pt"
+            voice.startsWith("gf") || voice.startsWith("gm") -> "de"
+            else -> "en"
+        }
+
+        Log.d(TAG, "textToPhonemes: detected voiceLang='$voiceLang' for voice='$voice' (hasJapanese=$hasJapanese, hasDevanagari=$hasDevanagari)")
+
+        return when (voiceLang) {
+            "ja" -> japaneseToPhonemes(text)
+            "hi" -> devanagariToPhonemes(text)
+            "zh" -> chineseToPhonemes(text)
+            "es" -> spanishToPhonemes(text)
+            "fr" -> frenchToPhonemes(text)
+            "it" -> italianToPhonemes(text)
+            "pt" -> portugueseToPhonemes(text)
+            else -> englishToPhonemes(text)
+        }
+    }
+
+    private fun japaneseToPhonemes(text: String): String {
+        val validChars = TOKEN_MAP.keys.toSet()
+        val result = StringBuilder()
+
+        val kanaMap = mapOf(
+            "あ" to "a", "い" to "i", "う" to "u", "え" to "e", "お" to "o",
+            "ア" to "a", "イ" to "i", "ウ" to "u", "エ" to "e", "オ" to "o",
+            "か" to "ka", "き" to "ki", "く" to "ku", "け" to "ke", "こ" to "ko",
+            "カ" to "ka", "キ" to "ki", "ク" to "ku", "ケ" to "ke", "コ" to "ko",
+            "が" to "ga", "ぎ" to "gi", "ぐ" to "gu", "げ" to "ge", "ご" to "go",
+            "ガ" to "ga", "ギ" to "gi", "グ" to "gu", "ゲ" to "ge", "ゴ" to "go",
+            "さ" to "sa", "し" to "ʃi", "す" to "su", "せ" to "se", "そ" to "so",
+            "サ" to "sa", "シ" to "ʃi", "ス" to "su", "セ" to "se", "ソ" to "so",
+            "ざ" to "za", "じ" to "ʤi", "ず" to "zu", "ぜ" to "ze", "ぞ" to "zo",
+            "ザ" to "za", "ジ" to "ʤi", "ズ" to "zu", "ゼ" to "ze", "ゾ" to "zo",
+            "た" to "ta", "ち" to "ʧi", "つ" to "tsu", "て" to "te", "と" to "to",
+            "タ" to "ta", "チ" to "ʧi", "ツ" to "tsu", "テ" to "te", "ト" to "to",
+            "だ" to "da", "ぢ" to "ʤi", "づ" to "zu", "で" to "de", "ど" to "do",
+            "ダ" to "da", "ヂ" to "ʤi", "ヅ" to "zu", "デ" to "de", "ド" to "do",
+            "な" to "na", "に" to "ni", "ぬ" to "nu", "ね" to "ne", "の" to "no",
+            "ナ" to "na", "ニ" to "ni", "ヌ" to "nu", "ネ" to "ne", "ノ" to "no",
+            "は" to "ha", "ひ" to "hi", "ふ" to "fu", "へ" to "he", "ほ" to "ho",
+            "ハ" to "ha", "ヒ" to "hi", "フ" to "fu", "ヘ" to "he", "ホ" to "ho",
+            "ば" to "ba", "び" to "bi", "ぶ" to "bu", "べ" to "be", "ぼ" to "bo",
+            "バ" to "ba", "ビ" to "bi", "ブ" to "bu", "ベ" to "be", "ボ" to "bo",
+            "ぱ" to "pa", "ぴ" to "pi", "ぷ" to "pu", "ぺ" to "pe", "ぽ" to "po",
+            "パ" to "pa", "ピ" to "pi", "プ" to "pu", "ペ" to "pe", "ポ" to "po",
+            "ま" to "ma", "み" to "mi", "む" to "mu", "め" to "me", "も" to "mo",
+            "マ" to "ma", "ミ" to "mi", "ム" to "mu", "メ" to "me", "モ" to "mo",
+            "や" to "ja", "ゆ" to "ju", "よ" to "jo",
+            "ヤ" to "ja", "ユ" to "ju", "ヨ" to "jo",
+            "ら" to "ra", "り" to "ri", "る" to "ru", "れ" to "re", "ろ" to "ro",
+            "ラ" to "ra", "リ" to "ri", "ル" to "ru", "レ" to "re", "ロ" to "ro",
+            "わ" to "wa", "を" to "o", "ん" to "n",
+            "ワ" to "wa", "ヲ" to "o", "ン" to "n",
+            "きゃ" to "kja", "きゅ" to "kju", "きょ" to "kjo",
+            "キャ" to "kja", "キュ" to "kju", "キョ" to "kjo", "しゃ" to "ʃa", "しゅ" to "ʃu", "しょ" to "ʃo",
+            "シャ" to "ʃa", "シュ" to "ʃu", "ショ" to "ʃo", "ちゃ" to "ʧa", "ちゅ" to "ʧu", "ちょ" to "ʧo",
+            "チャ" to "ʧa", "チュ" to "ʧu", "チョ" to "ʧo", "にゃ" to "nja", "にゅ" to "nju", "にょ" to "njo",
+            "ニャ" to "nja", "ニュ" to "nju", "ニョ" to "njo", "ひゃ" to "hja", "ひゅ" to "hju", "ひょ" to "hjo",
+            "ヒャ" to "hja", "ヒュ" to "hju", "ヒョ" to "hjo", "みゃ" to "mja", "みゅ" to "mju", "みょ" to "mjo",
+            "ミャ" to "mja", "ミュ" to "mju", "ミョ" to "mjo", "りゃ" to "rja", "りゅ" to "rju", "りょ" to "rjo",
+            "リャ" to "rja", "リュ" to "rju", "リョ" to "rjo", "ぎゃ" to "gja", "ぎゅ" to "gju", "ぎょ" to "gjo",
+            "ギャ" to "gja", "ギュ" to "gju", "ギョ" to "gjo", "じゃ" to "ʤa", "じゅ" to "ʤu", "じょ" to "ʤo",
+            "ジャ" to "ʤa", "ジュ" to "ʤu", "ジョ" to "ʤo", "びゃ" to "bja", "びゅ" to "bju", "びょ" to "bjo",
+            "ビャ" to "bja", "ビュ" to "bju", "ビョ" to "bjo", "ぴゃ" to "pja", "ぴゅ" to "pju", "ぴょ" to "pjo",
+            "ピャ" to "pja", "ピュ" to "pju", "ピョ" to "pjo",
+            "ー" to "", "っ" to "", "ッ" to ""
+        )
+
+        var i = 0
+        val chars = text
+        while (i < chars.length) {
+            val ch = chars[i]
+            when {
+                ch.isWhitespace() -> {
+                    if (result.isNotEmpty() && result.last() != ' ') result.append(' ')
+                    i++
+                }
+                ch in SENTENCE_DELIMITERS -> {
+                    if (ch in validChars) result.append(ch)
+                    i++
+                }
+                else -> {
+                    var matched = false
+                    if (i + 1 < chars.length) {
+                        val pair = chars.substring(i, i + 2)
+                        if (kanaMap.containsKey(pair)) {
+                            val ipa = kanaMap[pair]!!
+                            for (c in ipa) if (c in validChars) result.append(c)
+                            i += 2
+                            matched = true
+                        }
+                    }
+                    if (!matched) {
+                        val s = ch.toString()
+                        if (kanaMap.containsKey(s)) {
+                            val ipa = kanaMap[s]!!
+                            for (c in ipa) if (c in validChars) result.append(c)
+                        } else if (ch in validChars) {
+                            result.append(ch)
+                        }
+                        i++
+                    }
+                }
+            }
+        }
+
+        val resStr = result.toString().replace(Regex(" +"), " ").trim()
+        Log.d(TAG, "japaneseToPhonemes: '$text' -> '$resStr'")
+        return resStr
+    }
+
+    private fun chineseToPhonemes(text: String): String {
+        val validChars = TOKEN_MAP.keys.toSet()
+        val result = StringBuilder()
+
+        val pinyinMap = mapOf(
+            '没' to "mei", '问' to "wen", '题' to "ti", '主' to "zhu", '要' to "yao",
+            '在' to "zai", '于' to "yu", '机' to "ji", '器' to "qi", '人' to "ren",
+            '有' to "you", '更' to "geng", '新' to "xin", '其' to "qi", '内' to "nei",
+            '部' to "bu", '状' to "zhuang", '态' to "tai", '因' to "yin", '此' to "ci",
+            '即' to "ji", '便' to "bian", '获' to "huo", '取' to "qu", '了' to "le",
+            '出' to "chu", '发' to "fa", '地' to "di", '目' to "mu", '的' to "de",
+            '和' to "he", '乘' to "cheng", '客' to "ke", '信' to "xin", '息' to "xi",
+            '它' to "ta", '也' to "ye", '能' to "neng", '将' to "jiang", '这' to "zhe",
+            '些' to "xie", '锁' to "suo", '定' to "ding", '随' to "sui", '后' to "hou",
+            '不' to "bu", '断' to "duan", '误' to "wu", '听' to "ting", '日' to "ri",
+            '期' to "qi", '导' to "dao", '致' to "zhi", '相' to "xiang", '同' to "tong",
+            '提' to "ti", '示' to "shi", '环' to "huan", '节' to "jie", '反' to "fan",
+            '复' to "fu", '循' to "xun", '无' to "wu", '法' to "fa", '继' to "ji",
+            '续' to "xu", '进' to "jin", '行' to "xing", '下' to "xia", '一' to "yi",
+            '步' to "bu", '你' to "ni", '好' to "hao", '我' to "wo", '是' to "shi",
+            '中' to "zhong", '国' to "guo", '文' to "wen", '字' to "zi", '转' to "zhuan",
+            '语' to "yu", '音' to "yin", '大' to "da", '小' to "xiao", '多' to "duo",
+            '少' to "shao", '高' to "gao", '兴' to "xing", '看' to "kan", '到' to "dao"
+        )
+
+        for (ch in text) {
+            when {
+                ch.isWhitespace() -> {
+                    if (result.isNotEmpty() && result.last() != ' ') result.append(' ')
+                }
+                ch in SENTENCE_DELIMITERS -> {
+                    if (ch in validChars) result.append(ch)
+                }
+                ch in pinyinMap.keys -> {
+                    pinyinMap[ch]?.let { str -> for (c in str) if (c in validChars) result.append(c) }
+                    result.append(' ')
+                }
+                ch in validChars -> {
+                    result.append(ch)
+                }
+            }
+        }
+        val resStr = result.toString().replace(Regex(" +"), " ").trim()
+        Log.d(TAG, "chineseToPhonemes: '$text' -> '$resStr'")
+        return resStr
+    }
+
+    private fun devanagariToPhonemes(text: String): String {
+        val validChars = TOKEN_MAP.keys.toSet()
+        val result = StringBuilder()
+
+        val vowels = mapOf(
+            'अ' to "ə", 'आ' to "ɑː", 'इ' to "ɪ", 'ई' to "iː",
+            'उ' to "ʊ", 'ऊ' to "uː", 'ऋ' to "rɪ", 'ए' to "eː",
+            'ऐ' to "æ", 'ओ' to "oː", 'औ' to "ɔː"
+        )
+
+        val matras = mapOf(
+            'ा' to "ɑː", 'ि' to "ɪ", 'ी' to "iː", 'ุ' to "ʊ", 'ู' to "uː",
+            'ृ' to "rɪ", 'े' to "eː", 'ै' to "æ", 'ो' to "oː", 'ौ' to "ɔː",
+            'ं' to "ŋ", 'ँ' to "m", 'ः' to "h"
+        )
+
+        val consonants = mapOf(
+            'क' to "k", 'ख' to "k", 'ग' to "ɡ", 'घ' to "ɡ", 'ङ' to "ŋ",
+            'च' to "ʧ", 'छ' to "ʧ", 'ज' to "ʤ", 'झ' to "ʤ", 'ञ' to "ɲ",
+            'ट' to "ʈ", 'ठ' to "ʈ", 'ड' to "ɖ", 'ढ' to "ɖ", 'ण' to "ɳ",
+            'त' to "t", 'थ' to "t", 'द' to "d", 'ध' to "d", 'न' to "n",
+            'प' to "p", 'फ' to "f", 'ब' to "b", 'भ' to "b", 'म' to "m",
+            'य' to "j", 'र' to "r", 'ल' to "l", 'व' to "v",
+            'श' to "ʃ", 'ष' to "ʂ", 'स' to "s", 'ह' to "h",
+            'ड़' to "ɽ", 'ढ़' to "ɽ", 'ਫ਼' to "f", 'ਜ਼' to "z", 'क़' to "k", 'ਖ਼' to "x", 'ग़' to "ɣ"
+        )
+
+        val charArray = text.toCharArray()
+        var i = 0
+        while (i < charArray.size) {
+            val ch = charArray[i]
+            when {
+                ch.isWhitespace() -> {
+                    if (result.isNotEmpty() && result.last() != ' ') result.append(' ')
+                    i++
+                }
+                ch in SENTENCE_DELIMITERS -> {
+                    if (ch in validChars) result.append(ch)
+                    i++
+                }
+                ch in vowels.keys -> {
+                    vowels[ch]?.let { str -> for (c in str) if (c in validChars) result.append(c) }
+                    i++
+                }
+                ch in consonants.keys -> {
+                    consonants[ch]?.let { str -> for (c in str) if (c in validChars) result.append(c) }
+
+                    val nextCh = charArray.getOrNull(i + 1)
+                    if (nextCh != null && nextCh in matras.keys) {
+                        matras[nextCh]?.let { str -> for (c in str) if (c in validChars) result.append(c) }
+                        i += 2
+                    } else if (nextCh == '्') {
+                        i += 2 // Halant suppresses inherent schwa
+                    } else {
+                        if (nextCh == null || nextCh.isWhitespace() || nextCh in SENTENCE_DELIMITERS) {
+                            // Word boundary
+                        } else {
+                            if ('ə' in validChars) result.append('ə')
+                        }
+                        i++
+                    }
+                }
+                ch in matras.keys -> {
+                    matras[ch]?.let { str -> for (c in str) if (c in validChars) result.append(c) }
+                    i++
+                }
+                ch.isLetter() -> {
+                    val latinStr = ch.toString().lowercase()
+                    try {
+                        val ipa = com.github.medavox.ipa_transcribers.Language.ENGLISH.transcriber.transcribe(latinStr)
+                        for (c in ipa) { if (c in validChars) result.append(c) }
+                    } catch (_: Exception) {
+                        if (ch in validChars) result.append(ch)
+                    }
+                    i++
+                }
+                else -> {
+                    if (ch in validChars) result.append(ch)
+                    i++
+                }
+            }
+        }
+
+        val resStr = result.toString().replace(Regex(" +"), " ").trim()
+        Log.d(TAG, "devanagariToPhonemes: '$text' -> '$resStr'")
+        return resStr
+    }
+
+    private fun spanishToPhonemes(text: String): String {
+        val validChars = TOKEN_MAP.keys.toSet()
+        val result = StringBuilder()
+
+        val tokens = Regex("[\\p{L}\\p{M}']+|[.,!?;:\"\\s]").findAll(text)
+        for (match in tokens) {
+            val token = match.value
+            when {
+                token.isBlank() -> result.append(' ')
+                token.matches(Regex("[.,!?;:\"]")) -> result.append(token)
+                else -> {
+                    val cleaned = token.lowercase()
+                        .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ü", "u")
+                        .replace("ñ", "ɲ").replace("ll", "j").replace("ch", "ʧ").replace("rr", "r").replace("z", "s").replace("v", "b")
+                    for (ch in cleaned) {
+                        if (ch in validChars) result.append(ch)
+                    }
+                }
+            }
+        }
+        val resStr = result.toString().replace(Regex(" +"), " ").trim()
+        Log.d(TAG, "spanishToPhonemes: '$text' -> '$resStr'")
+        return resStr
+    }
+
+    private fun frenchToPhonemes(text: String): String {
+        val validChars = TOKEN_MAP.keys.toSet()
+        val result = StringBuilder()
+
+        val tokens = Regex("[\\p{L}\\p{M}']+|[.,!?;:\"\\s]").findAll(text)
+        for (match in tokens) {
+            val token = match.value
+            when {
+                token.isBlank() -> result.append(' ')
+                token.matches(Regex("[.,!?;:\"]")) -> result.append(token)
+                else -> {
+                    val cleaned = token.lowercase()
+                        .replace("é", "e").replace("è", "e").replace("ê", "e").replace("ë", "e")
+                        .replace("à", "a").replace("â", "a").replace("ç", "s").replace("ù", "u").replace("û", "u").replace("ô", "o")
+                        .replace("eau", "o").replace("au", "o").replace("ai", "e").replace("ei", "e")
+                        .replace("ou", "u").replace("ch", "ʃ")
+                    for (ch in cleaned) {
+                        if (ch in validChars) result.append(ch)
+                    }
+                }
+            }
+        }
+        val resStr = result.toString().replace(Regex(" +"), " ").trim()
+        Log.d(TAG, "frenchToPhonemes: '$text' -> '$resStr'")
+        return resStr
+    }
+
+    private fun italianToPhonemes(text: String): String {
+        val validChars = TOKEN_MAP.keys.toSet()
+        val result = StringBuilder()
+
+        val tokens = Regex("[\\p{L}\\p{M}']+|[.,!?;:\"\\s]").findAll(text)
+        for (match in tokens) {
+            val token = match.value
+            when {
+                token.isBlank() -> result.append(' ')
+                token.matches(Regex("[.,!?;:\"]")) -> result.append(token)
+                else -> {
+                    val cleaned = token.lowercase()
+                        .replace("à", "a").replace("è", "e").replace("é", "e").replace("ì", "i").replace("ò", "o").replace("ó", "o").replace("ù", "u")
+                        .replace("gli", "ʎ").replace("gn", "ɲ").replace("sc", "ʃ").replace("ch", "k")
+                    for (ch in cleaned) {
+                        if (ch in validChars) result.append(ch)
+                    }
+                }
+            }
+        }
+        return result.toString().replace(Regex(" +"), " ").trim()
+    }
+
+    private fun portugueseToPhonemes(text: String): String {
+        val validChars = TOKEN_MAP.keys.toSet()
+        val result = StringBuilder()
+
+        val tokens = Regex("[\\p{L}\\p{M}']+|[.,!?;:\"\\s]").findAll(text)
+        for (match in tokens) {
+            val token = match.value
+            when {
+                token.isBlank() -> result.append(' ')
+                token.matches(Regex("[.,!?;:\"]")) -> result.append(token)
+                else -> {
+                    for (ch in portugueseWordToPhonemes(token)) {
+                        if (ch in validChars) result.append(ch)
+                    }
+                }
+            }
+        }
+        val phonemes = result.toString().replace(Regex(" +"), " ").trim()
+        Log.d(TAG, "portugueseToPhonemes: '$text' -> '$phonemes'")
+        return phonemes
+    }
+
+    /**
+     * Lightweight Brazilian Portuguese G2P for Kokoro's pf_/pm_ voices.
+     *
+     * Kokoro's Portuguese pack is trained for pt-BR phonemes. The former
+     * letter-for-letter converter discarded distinctions such as é/ê, ó/ô,
+     * nh/lh, soft g, and Brazilian final vowels, which made Portuguese sound
+     * Spanish. This keeps the conversion on the custom Kokoro path while
+     * preserving the phonetic distinctions its voice pack expects.
+     */
+    private fun portugueseWordToPhonemes(word: String): String {
+        var value = word.lowercase(Locale.ROOT)
+            // Common Brazilian nasal diphthongs must be processed before accents.
+            .replace("ões", "ojʃ")
+            .replace("ão", "ɐw")
+            .replace("ãe", "ɐj")
+            .replace("õe", "oj")
+            .replace(Regex("am$"), "ɐw")
+            .replace(Regex("em$"), "ej")
+            // Keep Portuguese open/closed vowels instead of flattening them.
+            .replace("á", "a").replace("à", "a")
+            .replace("â", "ɐ").replace("ã", "ɐ")
+            .replace("é", "ɛ").replace("ê", "e")
+            .replace("í", "i")
+            .replace("ó", "ɔ").replace("ô", "o").replace("õ", "o")
+            .replace("ú", "u")
+            .replace("ç", "s")
+            .replace("ch", "ʃ")
+            .replace("lh", "ʎ")
+            .replace("nh", "ɲ")
+            .replace("rr", "ʁ")
+            .replace("qu", "k")
+            .replace("gu", "g")
+
+        val output = StringBuilder()
+        fun isVowel(char: Char?): Boolean = char != null && char in "aeiouɛɔɐ"
+
+        for (index in value.indices) {
+            val char = value[index]
+            val previous = value.getOrNull(index - 1)
+            val next = value.getOrNull(index + 1)
+            val phoneme = when (char) {
+                'c' -> if (next == 'e' || next == 'i' || next == 'ɛ') "s" else "k"
+                'g' -> if (next == 'e' || next == 'i' || next == 'ɛ') "ʒ" else "g"
+                'j' -> "ʒ"
+                'x' -> "ʃ"
+                'r' -> if (index == 0 || previous == 'ʁ' || next == null) "ʁ" else "ɾ"
+                's' -> if (isVowel(previous) && isVowel(next)) "z" else "s"
+                'z' -> "z"
+                'd' -> if (next == 'i') "dʒ" else "d"
+                't' -> if (next == 'i') "tʃ" else "t"
+                // Brazilian Portuguese commonly reduces word-final e/o to i/u.
+                'e' -> if (next == null) "i" else "e"
+                'o' -> if (next == null) "u" else "o"
+                // In coda position, m/n nasalise the preceding vowel rather than
+                // sounding as a separate Spanish-style consonant.
+                'm', 'n' -> if (next == null || !isVowel(next)) "" else char.toString()
+                'h' -> ""
+                else -> char.toString()
+            }
+            output.append(phoneme)
+        }
+        return output.toString()
+    }
+
     private fun englishToPhonemes(text: String): String {
         loadCmuDictIfNeeded()
         val dict = cmuDict
@@ -986,20 +1502,19 @@ class TtsService(private val context: Context, private val isTranslationFeature:
         val validChars = TOKEN_MAP.keys.toSet()
         val result = StringBuilder()
 
-        // Split into word/punctuation tokens
-        val tokens = Regex("[a-zA-Z']+|[.,!?;:\"\\s]").findAll(text)
+        // Split into word/punctuation tokens using Unicode letter matching
+        val tokens = Regex("[\\p{L}\\p{M}']+|[.,!?;:\"\\s]").findAll(text)
         for (match in tokens) {
             val token = match.value
             when {
                 token.isBlank() -> result.append(' ')
                 token.matches(Regex("[.,!?;:\"]")) -> result.append(token)
-                token.matches(Regex("[a-zA-Z']+")) -> {
+                token.matches(Regex("[\\p{L}\\p{M}']+")) -> {
                     val upper = token.uppercase().trimEnd('\'')
                     // Check overrides first — CMU dict has wrong pronunciations for
                     // common function words that share spelling with abbreviations
                     val ipa = DICT_OVERRIDES[upper] ?: dict?.get(upper)
                     val dictValidChars = ipa?.filter { it in validChars } ?: ""
-                    Log.d(TAG, "G2P: '$token' upper='$upper' ipa=${ipa?.take(20)} dictValid='$dictValidChars'")
 
                     // All-caps acronym not in dict (or dict returned no valid tokens) → spell each letter
                     if (dictValidChars.isEmpty() && token.length in 2..6 && token.all { c -> c.isUpperCase() }) {
@@ -1020,8 +1535,7 @@ class TtsService(private val context: Context, private val isTranslationFeature:
                             // Use dict IPA — already confirmed it has valid chars
                             ipa!!
                         } else {
-                            // Dict missing or useless — always pass lowercase so IPA transcriber
-                            // treats the input as a word, not letter names
+                            // Dict missing or useless — pass lowercase to IPA transcriber
                             try {
                                 com.github.medavox.ipa_transcribers.Language.ENGLISH.transcriber.transcribe(token.lowercase())
                             } catch (e: Exception) {

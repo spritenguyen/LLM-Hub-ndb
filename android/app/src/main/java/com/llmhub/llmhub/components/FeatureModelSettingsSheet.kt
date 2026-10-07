@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.llmhub.llmhub.R
 import com.llmhub.llmhub.data.DeviceInfo
 import com.llmhub.llmhub.data.LLMModel
+import com.llmhub.llmhub.data.GgufLayerLimits
 import com.llmhub.llmhub.data.ModelConfig
 import com.llmhub.llmhub.data.ModelPreferences
 import com.llmhub.llmhub.data.hasDownloadedVisionProjector
@@ -54,6 +56,7 @@ import com.llmhub.llmhub.inference.MediaPipeInferenceService
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,9 +84,11 @@ fun FeatureModelSettingsSheet(
     var showBackendMenu by remember { mutableStateOf(false) }
     var selectedModel by remember { mutableStateOf(initialSelectedModel ?: currentlyLoadedModel ?: availableModels.firstOrNull()) }
 
-    val baseMaxTokensCap = remember(selectedModel) {
-        selectedModel?.let { MediaPipeInferenceService.getMaxTokensForModelStatic(it) } ?: 4096
-    }
+    var ggufContextLimit by remember(selectedModel?.name) { mutableStateOf<Int?>(null) }
+    var ggufContextChecked by remember(selectedModel?.name) { mutableStateOf(false) }
+    val baseMaxTokensCap = ggufContextLimit
+        ?: selectedModel?.let { MediaPipeInferenceService.getMaxTokensForModelStatic(it) }
+        ?: 4096
     val isLiteRtLm = remember(selectedModel) { selectedModel?.modelFormat == "litertlm" }
     val isPhi4Mini = remember(selectedModel) {
         selectedModel?.name?.contains("Phi-4 Mini", ignoreCase = true) == true
@@ -100,14 +105,14 @@ fun FeatureModelSettingsSheet(
         canSelectAccelerator && !isGemma4_12B
     }
     val defaultUseGpu = remember(selectedModel, isGemma4_12B) {
-        if (isGemma4_12B) true else if (isPhi4Mini) false else selectedModel?.supportsGpu == true
+        if (selectedModel?.modelFormat == "gguf") false else if (isGemma4_12B) true else if (isPhi4Mini) false else selectedModel?.supportsGpu == true
     }
     val canUseNpuForSelectedModel by remember(selectedModel, isPhi4Mini) {
         derivedStateOf {
             selectedModel?.supportsGpu == true &&
                 !isPhi4Mini &&
                 selectedModel?.modelFormat == "gguf" &&
-                DeviceInfo.isQualcommNpuSupported()
+                DeviceInfo.isLlamaCppHexagonSupported()
         }
     }
 
@@ -122,30 +127,64 @@ fun FeatureModelSettingsSheet(
             }
         )
     }
-    var useNpu by remember(initialSelectedNpuDeviceId, selectedModel) {
+    var useNpu by remember(initialSelectedBackend, initialSelectedNpuDeviceId, selectedModel) {
         mutableStateOf(
-            initialSelectedNpuDeviceId != null ||
-                (selectedModel?.modelFormat == "gguf" && DeviceInfo.isQualcommNpuSupported())
+            initialSelectedNpuDeviceId != null
         )
     }
     var gpuLayers by remember { mutableStateOf(999) }
+    var gpuLayerLimit by remember { mutableIntStateOf(GgufLayerLimits.UNKNOWN) }
     var enableThinking by remember { mutableStateOf(true) }
 
     LaunchedEffect(selectedModel?.name) {
         selectedModel?.let { model ->
+            gpuLayerLimit = GgufLayerLimits.UNKNOWN
+            val (layers, fileContext) = withContext(Dispatchers.IO) {
+                GgufLayerLimits.forModel(context, model) to GgufLayerLimits.contextForModel(context, model)
+            }
+            gpuLayerLimit = layers ?: GgufLayerLimits.UNKNOWN
+            ggufContextLimit = fileContext
+            if (fileContext != null) {
+                maxTokensValue = initialMaxTokens.coerceIn(1, fileContext)
+            }
+            ggufContextChecked = true
             val saved = modelPrefs.getModelConfig(model.name)
             if (saved != null) {
-                gpuLayers = saved.nGpuLayers
+                gpuLayers = saved.nGpuLayers.coerceIn(0, gpuLayerLimit)
                 enableThinking = saved.enableThinking
+                if (currentlyLoadedModel?.name != model.name) {
+                    useGpu = saved.backend == "GPU"
+                    useNpu = saved.backend == "GPU" && saved.deviceId == "dev0"
+                }
+            } else {
+                gpuLayers = gpuLayerLimit
+                if (currentlyLoadedModel?.name != model.name) {
+                    useGpu = defaultUseGpu
+                    useNpu = false
+                }
             }
         }
     }
 
     val isThinkingOrHarmonyModel by remember(selectedModel) {
         derivedStateOf {
-            val name = selectedModel?.name?.lowercase() ?: ""
+            val model = selectedModel ?: return@derivedStateOf false
+            val name = model.name.lowercase()
+            if (name.contains("lfm2.5-8b-a1b") || name.contains("lfm-2.5 2.6b") || name.contains("lfm")) {
+                return@derivedStateOf false
+            }
+            if (name.contains("gemma-4") || name.contains("gemma 4") || name.contains("gemma_4")) {
+                return@derivedStateOf model.modelFormat == "litertlm"
+            }
+            if (name.contains("muse glimmer") || name.contains("muse-glimmer")) {
+                return@derivedStateOf false
+            }
+            if (name.contains("granite-4.2") || name.contains("granite 4.2")) {
+                return@derivedStateOf false
+            }
             name.contains("thinking") || name.contains("reasoning") ||
-                name.contains("gpt-oss") || name.contains("gpt_oss")
+                name.contains("gpt-oss") || name.contains("gpt_oss") ||
+                model.supportsThinking
         }
     }
 
@@ -158,7 +197,8 @@ fun FeatureModelSettingsSheet(
         }
     }
 
-    LaunchedEffect(selectedModel?.name, baseMaxTokensCap, isGemma4_12B) {
+    LaunchedEffect(selectedModel?.name, baseMaxTokensCap, isGemma4_12B, ggufContextChecked) {
+        if (selectedModel?.modelFormat == "gguf" && !ggufContextChecked) return@LaunchedEffect
         // Preserve user's saved value, just cap it to the selected model's context window
         val capped = minOf(maxTokensValue.coerceAtLeast(1), baseMaxTokensCap.coerceAtLeast(1))
         maxTokensValue = capped
@@ -422,15 +462,11 @@ fun FeatureModelSettingsSheet(
                                         val deviceId = if (useNpu) "dev0" else null
                                         scope.launch(Dispatchers.IO) {
                                             try {
-                                                val cfg = ModelConfig(
+                                                val cfg = (modelPrefs.getModelConfig(model.name)
+                                                    ?: com.llmhub.llmhub.data.defaultConfigForModel(model)).copy(
                                                     maxTokens = finalMax,
-                                                    topK = 64,
-                                                    topP = 0.95f,
-                                                    temperature = 1.0f,
                                                     backend = backend?.name,
                                                     deviceId = deviceId,
-                                                    disableVision = false,
-                                                    disableAudio = false,
                                                     nGpuLayers = gpuLayers,
                                                     enableThinking = enableThinking
                                                 )
@@ -533,7 +569,7 @@ fun FeatureModelSettingsSheet(
                                 Slider(
                                     value = gpuLayers.toFloat(),
                                     onValueChange = { gpuLayers = it.toInt() },
-                                    valueRange = 0f..999f,
+                                    valueRange = 0f..gpuLayerLimit.toFloat(),
                                     modifier = Modifier.weight(1f).height(28.dp),
                                     thumb = {
                                         SliderDefaults.Thumb(
@@ -545,7 +581,7 @@ fun FeatureModelSettingsSheet(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 OutlinedTextField(
                                     value = gpuLayers.toString(),
-                                    onValueChange = { v -> gpuLayers = v.filter { it.isDigit() }.toIntOrNull()?.coerceIn(0, 999) ?: gpuLayers },
+                                    onValueChange = { v -> gpuLayers = v.filter { it.isDigit() }.toIntOrNull()?.coerceIn(0, gpuLayerLimit) ?: gpuLayers },
                                     modifier = Modifier.width(72.dp),
                                     singleLine = true
                                 )
@@ -568,6 +604,7 @@ fun FeatureModelSettingsSheet(
                                     onCheckedChange = { enableThinking = it }
                                 )
                             }
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
 
                         extraModelConfigsContent?.invoke(this)

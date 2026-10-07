@@ -713,18 +713,25 @@ private const val SENTINEL_ENDTHINK = "\u200B\u200BENDTHINK\u200B\u200B"
 private const val RAW_OPEN_THINK = "<think>"
 private const val RAW_CLOSE_THINK = "</think>"
 
-private fun parseThinkingAndAnswer(content: String): Pair<String, String> {
-    // 1) Same as chat: sentinels from OnnxInferenceService / GeniexInferenceService
+fun parseThinkingAndAnswer(content: String): Pair<String, String> {
+    // 1) Sentinels from OnnxInferenceService / GeniexInferenceService
     if (content.contains(SENTINEL_THINK)) {
         val afterThink = content.substringAfter(SENTINEL_THINK)
         if (afterThink.contains(SENTINEL_ENDTHINK)) {
-            val thinking = afterThink.substringBefore(SENTINEL_ENDTHINK)
-            val answer = afterThink.substringAfter(SENTINEL_ENDTHINK)
+            val thinking = afterThink.substringBefore(SENTINEL_ENDTHINK).trim()
+            val answer = afterThink.substringAfter(SENTINEL_ENDTHINK).trim()
             return thinking to answer
         }
-        return afterThink to ""
+        val thinking = afterThink.trim()
+        return (if (thinking.isEmpty()) "…" else thinking) to ""
     }
-    // 2) Raw <think>...</think>
+    // 2) Sentinel closing tag only
+    if (content.contains(SENTINEL_ENDTHINK)) {
+        val thinking = content.substringBefore(SENTINEL_ENDTHINK).trim()
+        val answer = content.substringAfter(SENTINEL_ENDTHINK).trim()
+        return thinking to answer
+    }
+    // 3) Raw <think>...</think>
     if (content.contains(RAW_OPEN_THINK)) {
         val afterThink = content.substringAfter(RAW_OPEN_THINK)
         if (afterThink.contains(RAW_CLOSE_THINK)) {
@@ -733,13 +740,15 @@ private fun parseThinkingAndAnswer(content: String): Pair<String, String> {
             return thinking to answer
         } else {
             // Streaming/incomplete: everything after <think> is thinking content, answer is empty
-            return afterThink.trim() to ""
+            val thinking = afterThink.trim()
+            return (if (thinking.isEmpty()) "…" else thinking) to ""
         }
     }
-    // 3) Closing tag only (e.g. "THINK I think ... </think>\n\nanswer" when no <think>)
+    // 4) Closing raw tag only (model emitted </think> without explicit <think>)
     if (content.contains(RAW_CLOSE_THINK)) {
+        val thinking = content.substringBefore(RAW_CLOSE_THINK).trim()
         val answer = content.substringAfter(RAW_CLOSE_THINK).trim()
-        if (answer.isNotEmpty()) return "" to answer
+        return thinking to answer
     }
     return "" to content
 }
@@ -754,7 +763,9 @@ fun getDisplayContentWithoutThinking(content: String): String {
     if (answer.isNotEmpty()) return answer
     // Don't show thinking as result: if we detected thinking (sentinels or THINK prefix / </think>) but no answer, show nothing
     val hasThinking = content.contains(SENTINEL_THINK) ||
-        (content.contains(RAW_CLOSE_THINK)) ||
+        content.contains(SENTINEL_ENDTHINK) ||
+        content.contains(RAW_OPEN_THINK) ||
+        content.contains(RAW_CLOSE_THINK) ||
         (content.trimStart().uppercase().startsWith("THINK"))
     return if (hasThinking) "" else content
 }
@@ -2385,37 +2396,66 @@ fun MessageInput(
                             }
                         }
                     } else {
-                        // Show send button when not loading
-                        IconButton(
-                            onClick = {
-                                if (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null) {
-                                    // Aggressively hide keyboard using multiple methods
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    onSendMessage(textState.text, attachmentUri, recordedAudioData)
-                                    textState = TextFieldValue("")
-                                    attachmentUri = null
-                                    attachmentInfo = null
-                                    recordedAudioData = null
+                        // Show send button and dedicated mic button when supportsAudio is enabled
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (supportsAudio && textState.text.isEmpty() && attachmentUri == null && recordedAudioData == null) {
+                                IconButton(
+                                    onClick = {
+                                        if (hasAudioPermission) {
+                                            isRecording = true
+                                        } else {
+                                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                    enabled = enabled
+                                ) {
+                                    Surface(
+                                        modifier = Modifier.size(32.dp),
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Mic,
+                                            contentDescription = stringResource(R.string.audio_recording),
+                                            modifier = Modifier.padding(6.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
-                            },
-                            enabled = enabled && (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(32.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (enabled && (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null)) 
-                                    MaterialTheme.colorScheme.primary 
-                                else MaterialTheme.colorScheme.surfaceVariant
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    if (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null) {
+                                        // Aggressively hide keyboard using multiple methods
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                        onSendMessage(textState.text, attachmentUri, recordedAudioData)
+                                        textState = TextFieldValue("")
+                                        attachmentUri = null
+                                        attachmentInfo = null
+                                        recordedAudioData = null
+                                    }
+                                },
+                                enabled = enabled && (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null)
                             ) {
-                                Icon(
-                                    Icons.Default.Send,
-                                    contentDescription = stringResource(R.string.send),
-                                    modifier = Modifier.padding(6.dp),
-                                    tint = if (enabled && (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null)) 
-                                        MaterialTheme.colorScheme.onPrimary 
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Surface(
+                                    modifier = Modifier.size(32.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = if (enabled && (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null)) 
+                                        MaterialTheme.colorScheme.primary 
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                ) {
+                                    Icon(
+                                        Icons.Default.Send,
+                                        contentDescription = stringResource(R.string.send),
+                                        modifier = Modifier.padding(6.dp),
+                                        tint = if (enabled && (textState.text.isNotBlank() || attachmentUri != null || recordedAudioData != null)) 
+                                            MaterialTheme.colorScheme.onPrimary 
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
