@@ -37,7 +37,7 @@ jobs:
 
       - name: Install Android build dependencies
         run: |
-          sdkmanager --install "ndk;29.0.13113456" "cmake;3.31.6" "platforms;android-37"
+          sdkmanager --install "ndk;29.0.13113456" "cmake;3.31.6" "platforms;android-37.0"
           
       - name: Build Debug APK
         run: ./gradlew assembleDebug
