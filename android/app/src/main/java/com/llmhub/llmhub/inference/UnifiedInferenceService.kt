@@ -76,11 +76,13 @@ class UnifiedInferenceService(private val context: Context) : InferenceService {
             val usingLlamaCppFallback = currentService === llamaCppService
             val backendMatches = (finalBackend == null || finalBackend == currentBackend) &&
                 (!usingLlamaCppFallback || finalDeviceId == llamaCppService.getCurrentlyLoadedDeviceId())
+            val cpuThreadsMatch = !usingLlamaCppFallback || llamaCppService.matchesCpuThreads(cfg?.cpuThreads ?: 0)
             val visionMatches = finalDisableVision == isVisionDisabled
             val audioMatches = usingLlamaCppFallback ||
                 finalDisableAudio == isAudioDisabled
             if (loaded?.name == model.name &&
                 backendMatches &&
+                cpuThreadsMatch &&
                 visionMatches &&
                 audioMatches
             ) {

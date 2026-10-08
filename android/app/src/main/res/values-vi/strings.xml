@@ -914,4 +914,8 @@
     <string name="gguf_vulkan_setting">Bộ xử lý GPU GGUF</string>
     <string name="crash_recovery_title">Ứng dụng đã đóng bất ngờ</string>
     <string name="crash_recovery_message">Hãy thử tải mô hình nhỏ hơn hoặc sử dụng CPU.</string>
+    <string name="cpu_threads_title">Số luồng CPU (GGUF)</string>
+    <string name="cpu_threads_auto">Tự động</string>
+    <string name="cpu_threads_help">Lưu riêng theo model khi bấm Nạp. Hãy Gỡ model trước khi đổi số luồng, rồi Nạp lại. Áp dụng cho xử lý prompt và sinh token; không ghim nhân CPU.</string>
+    <string name="cpu_threads_save_error">Không lưu được cấu hình model. Vui lòng thử lại.</string>
 </resources>

@@ -1022,4 +1022,8 @@
     <string name="gguf_vulkan_setting">GGUF GPU backend</string>
     <string name="crash_recovery_title">App closed unexpectedly</string>
     <string name="crash_recovery_message">Try loading a smaller model or using CPU.</string>
+    <string name="cpu_threads_title">CPU threads (GGUF)</string>
+    <string name="cpu_threads_auto">Auto</string>
+    <string name="cpu_threads_help">Saved per model when you tap Load. Unload first to change threads, then Load again. Applies to prompt processing and token generation; this does not pin CPU cores.</string>
+    <string name="cpu_threads_save_error">Could not save model settings. Please try again.</string>
 </resources>

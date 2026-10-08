@@ -6,6 +6,8 @@ import android.net.Uri
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.llmhub.llmhub.R
+import com.llmhub.llmhub.data.CpuThreadSettings
+import com.llmhub.llmhub.data.ModelPreferences
 import com.llmhub.llmhub.data.LLMModel
 import com.llmhub.llmhub.data.effectiveContextWindow
 import com.llmhub.llmhub.data.localFileName
@@ -147,6 +149,10 @@ class LlamaCppInferenceService(private val context: Context) : InferenceService 
 
     private var overrideMaxTokens: Int? = null
     private var overrideContextWindow: Int? = null
+    private var loadedCpuThreads: Int? = null
+
+    fun matchesCpuThreads(requested: Int): Boolean = loadedCpuThreads ==
+        CpuThreadSettings.resolve(requested, Runtime.getRuntime().availableProcessors())
     private var overrideTopK: Int? = null
     private var overrideTopP: Float? = null
     private var overrideTemperature: Float? = null
@@ -215,7 +221,8 @@ class LlamaCppInferenceService(private val context: Context) : InferenceService 
             contextSize = (overrideContextWindow?.takeIf { it > 0 }
                 ?: minOf(4096, modelContextLimit))
                 .coerceIn(512, modelContextLimit.coerceAtLeast(512))
-            val threads = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(2, 8)
+            val requestedThreads = ModelPreferences(context).getModelConfig(model.name)?.cpuThreads ?: 0
+            val threads = CpuThreadSettings.resolve(requestedThreads, Runtime.getRuntime().availableProcessors())
             val modelDir = modelFile.parentFile ?: File(context.filesDir, "models")
             val mmprojFile = if (model.supportsVision && !disableVision) {
                 findMmprojFile(modelDir, modelFile, model)
@@ -261,6 +268,7 @@ class LlamaCppInferenceService(private val context: Context) : InferenceService 
                     check(result == 0) { "llama.cpp model load failed on $attemptName with code $result" }
 
                     currentModel = model
+                    loadedCpuThreads = threads
                     loadedBackend = if (attemptAccelerator == null) LlmInference.Backend.CPU else LlmInference.Backend.GPU
                     loadedDeviceId = if (attemptAccelerator == null) null else deviceId
                     loadedRuntimeName = attemptName

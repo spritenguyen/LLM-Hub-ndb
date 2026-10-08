@@ -62,6 +62,11 @@ fun ChatSettingsSheet(
         mutableStateOf(initialSelectedModel ?: currentlyLoadedModel ?: availableModels.firstOrNull()) 
     }
     
+    var cpuThreads by remember(selectedModel?.name) { mutableIntStateOf(0) }
+    var cpuThreadsMenuExpanded by remember { mutableStateOf(false) }
+    var isSavingConfig by remember { mutableStateOf(false) }
+    val cpuThreadLimit = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
+
     // Model-specific configurations
     var ggufContextLimit by remember(selectedModel?.name) { mutableStateOf<Int?>(null) }
     val baseMaxTokensCap = (ggufContextLimit
@@ -189,6 +194,7 @@ fun ChatSettingsSheet(
             try {
                 val saved = modelPrefs.getModelConfig(model.name)
                 if (saved != null) {
+                    cpuThreads = saved.cpuThreads.coerceIn(0, cpuThreadLimit)
                     // Restore saved context window
                     val savedCtxWindow = if (saved.contextWindow > 0) saved.contextWindow.coerceIn(1, newBaseCap) else minOf(4096, newBaseCap)
                     contextWindowValue = savedCtxWindow
@@ -212,6 +218,7 @@ fun ChatSettingsSheet(
                     agentToolsEnabled = saved.agentToolsEnabled
                     systemPromptText = saved.systemPrompt
                 } else {
+                    cpuThreads = 0
                     // Reset to defaults for new model
                     val effCap = if (selectedModelSupportsVisionInput) minOf(newBaseCap, 8192) else newBaseCap
                     val defaultCtx = minOf(4096, effCap)
@@ -233,6 +240,7 @@ fun ChatSettingsSheet(
                     gpuLayers = gpuLayerLimit
                 }
             } catch (e: Exception) {
+                cpuThreads = 0
                 // Reset to defaults on error
                 val effCap = if (selectedModelSupportsVisionInput) minOf(newBaseCap, 8192) else newBaseCap
                 val defaultCtx = minOf(4096, effCap)
@@ -574,8 +582,9 @@ fun ChatSettingsSheet(
                                         } else null
                                         val deviceId = if (useNpu) "dev0" else null
                                         
-                                        // Save config
-                                        scope.launch(Dispatchers.IO) {
+                                        // Save before loading so the backend reads the new thread count.
+                                        isSavingConfig = true
+                                        scope.launch {
                                             try {
                                                 val cfg = ModelConfig(
                                                     maxTokens = finalMax,
@@ -590,18 +599,24 @@ fun ChatSettingsSheet(
                                                     enableThinking = enableThinking,
                                                     agentToolsEnabled = agentToolsEnabled,
                                                     systemPrompt = systemPromptText.trim(),
-                                                    contextWindow = finalCtxWindow
+                                                    contextWindow = finalCtxWindow,
+                                                    cpuThreads = cpuThreads
                                                 )
-                                                modelPrefs.setModelConfig(model.name, cfg)
-                                            } catch (_: Exception) {}
+                                                withContext(Dispatchers.IO) { modelPrefs.setModelConfig(model.name, cfg) }
+                                                onLoadModel(model, cfg.maxTokens, cfg.topK, cfg.topP, cfg.temperature, backend, cfg.deviceId, cfg.disableVision, cfg.disableAudio, cfg.nGpuLayers, cfg.enableThinking, cfg.contextWindow, cfg.agentToolsEnabled)
+                                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                                throw e
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(context, context.getString(R.string.cpu_threads_save_error), android.widget.Toast.LENGTH_LONG).show()
+                                            } finally {
+                                                isSavingConfig = false
+                                            }
                                         }
-                                        
-                                        onLoadModel(model, finalMax, topK, topP, temperature, backend, deviceId, disableVision, disableAudio, gpuLayers, enableThinking, finalCtxWindow, agentToolsEnabled)
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
-                                enabled = selectedModel != null && !isLoadingModel
+                                enabled = selectedModel != null && !isLoadingModel && !isSavingConfig
                             ) {
                                 if (isLoadingModel) {
                                     CircularProgressIndicator(
@@ -639,6 +654,29 @@ fun ChatSettingsSheet(
                             color = MaterialTheme.colorScheme.primary
                         )
                         
+                        // CPU workers are applied when loading a GGUF model.
+                        if (selectedModel?.modelFormat == "gguf") {
+                            Text(stringResource(R.string.cpu_threads_title), style = MaterialTheme.typography.bodyMedium)
+                            Box {
+                                OutlinedButton(
+                                    onClick = { cpuThreadsMenuExpanded = true },
+                                    enabled = !isLoadingModel && !isSavingConfig && currentlyLoadedModel?.name != selectedModel?.name
+                                ) {
+                                    Text(if (cpuThreads == 0) stringResource(R.string.cpu_threads_auto) else cpuThreads.toString())
+                                }
+                                DropdownMenu(expanded = cpuThreadsMenuExpanded, onDismissRequest = { cpuThreadsMenuExpanded = false }) {
+                                    for (count in 0..cpuThreadLimit) {
+                                        DropdownMenuItem(
+                                            text = { Text(if (count == 0) stringResource(R.string.cpu_threads_auto) else count.toString()) },
+                                            onClick = { cpuThreads = count; cpuThreadsMenuExpanded = false }
+                                        )
+                                    }
+                                }
+                            }
+                            Text(stringResource(R.string.cpu_threads_help), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
                         // Context Window
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -942,6 +980,7 @@ fun ChatSettingsSheet(
                                         } catch (_: Exception) {}
                                     }
                                     
+                                    cpuThreads = 0
                                     // Reset to defaults
                                     val newMaxTokensCap = baseMaxTokensCap
                                     val newIsGemma3n = model.name.contains("Gemma-3n", ignoreCase = true)

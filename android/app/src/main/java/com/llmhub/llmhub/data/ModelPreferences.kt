@@ -21,6 +21,7 @@ data class ModelConfig(
     val enableThinking: Boolean = true, // whether thinking/reasoning output is enabled
     val systemPrompt: String = "", // optional per-model system prompt injected for chat generation
     val contextWindow: Int = 0, // KV cache allocation (context window size); 0 = use model default
+    val cpuThreads: Int = 0, // 0 = Auto; explicit llama.cpp worker count
     val agentToolsEnabled: Boolean = true // whether Gemma-4 agent tools are active
 ) {
     fun toJson(): JSONObject {
@@ -39,6 +40,7 @@ data class ModelConfig(
         obj.put("systemPrompt", systemPrompt)
         obj.put("contextWindow", contextWindow)
         obj.put("agentToolsEnabled", agentToolsEnabled)
+        obj.put("cpuThreads", cpuThreads.coerceIn(0, 8))
         return obj
     }
 
@@ -57,6 +59,7 @@ data class ModelConfig(
                 enableThinking = obj.optBoolean("enableThinking", true),
                 systemPrompt = obj.optString("systemPrompt", ""),
                 contextWindow = obj.optInt("contextWindow", 0),
+                cpuThreads = obj.optInt("cpuThreads", 0).coerceIn(0, 8),
                 agentToolsEnabled = obj.optBoolean("agentToolsEnabled", true)
             )
         }
